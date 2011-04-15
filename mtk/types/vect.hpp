@@ -41,6 +41,7 @@
 #ifndef VECT_H_
 #define VECT_H_
 
+#include <iosfwd>
 
 #include "../src/vectview.hpp"
 
@@ -51,7 +52,7 @@ namespace MTK {
  * Implementation is basically a wrapper around Eigen::Matrix with manifold 
  * requirements added.
  */
-template<class _scalar, int D>
+template<int D, class _scalar = double>
 struct vect : public Eigen::Matrix<_scalar, D, 1> {
 	typedef Eigen::Matrix<_scalar, D, 1> base;
 	enum {DOF = D};
@@ -74,8 +75,18 @@ struct vect : public Eigen::Matrix<_scalar, D, 1> {
 	void boxplus(MTK::vectview<const scalar, DOF> vec, scalar scale=1) {
 		*this += scale * vec;
 	}
-	void boxminus(MTK::vectview<scalar, DOF> res, const vect<scalar, D>& other) const {
+	void boxminus(MTK::vectview<scalar, DOF> res, const vect<D, scalar>& other) const {
 		res = *this - other;
+	}
+	
+	
+	friend std::ostream& operator<<(std::ostream &os, const vect<D, scalar>& v){
+		return os << v.transpose() << " ";
+	}
+	friend std::istream& operator>>(std::istream &is, vect<D, scalar>& v){
+		for(int i=0; i<DOF; ++i)
+			is >> v(i);
+		return is;
 	}
 };
 
@@ -85,7 +96,7 @@ struct vect : public Eigen::Matrix<_scalar, D, 1> {
  * Implementation is basically a wrapper around Eigen::Matrix with manifold 
  * requirements added, i.e., matrix is viewed as a plain vector for that.
  */
-template<class _scalar, int M, int N, int _Options = Eigen::Matrix<_scalar, M, N>::Options>
+template<int M, int N, class _scalar = double, int _Options = Eigen::Matrix<_scalar, M, N>::Options>
 struct matrix : public Eigen::Matrix<_scalar, M, N, _Options> {
 	typedef Eigen::Matrix<_scalar, M, N, _Options> base;
 	enum {DOF = M * N};
@@ -112,6 +123,18 @@ struct matrix : public Eigen::Matrix<_scalar, M, N, _Options> {
 		base::Map(res.data()) = *this - other;
 	}
 	
+	friend std::ostream& operator<<(std::ostream &os, const matrix<M, N, scalar, _Options>& mat){
+		for(int i=0; i<DOF; ++i){
+			os << mat.data()[i] << " ";
+		}
+		return os;
+	}
+	friend std::istream& operator>>(std::istream &is, matrix<M, N, scalar, _Options>& mat){
+		for(int i=0; i<DOF; ++i){
+			is >> mat.data()[i];
+		}
+		return is;
+	}
 };
 
 
@@ -119,7 +142,7 @@ struct matrix : public Eigen::Matrix<_scalar, M, N, _Options> {
 /**
  * A simple scalar type.
  */
-template<class _scalar>
+template<class _scalar = double>
 struct Scalar {
 	enum {DOF = 1};
 	typedef _scalar scalar;
@@ -143,7 +166,7 @@ struct Scalar {
  * Positive scalars.
  * Boxplus is implemented using multiplication by @f$x\boxplus\delta = x\cdot\exp(\delta) @f$.
  */
-template<class _scalar>
+template<class _scalar = double>
 struct PositiveScalar {
 	enum {DOF = 1};
 	typedef _scalar scalar;
@@ -161,6 +184,12 @@ struct PositiveScalar {
 	}
 	void boxminus(MTK::vectview<scalar, DOF> res, const PositiveScalar& other) const {
 		res[0] = std::log(*this / other);
+	}
+	
+	friend std::istream& operator>>(std::istream &is, PositiveScalar<scalar>& s){
+		is >> s.value;
+		assert(s.value > 0);
+		return is;
 	}
 };
 

@@ -55,12 +55,12 @@ namespace MTK {
  * 
  * @todo add conversions from/to polar angles?
  */
-template<class _scalar>
+template<class _scalar = double>
 struct S2 {
 	
 	typedef _scalar scalar;
-	typedef typename vect<scalar, 3>::base vect_type;
-	typedef typename vect<scalar, 2>::base vec2;
+	typedef typename vect<3, scalar>::base vect_type;
+	typedef typename vect<2, scalar>::base vec2;
 	enum {DOF=2};
 	
 private:
@@ -107,6 +107,16 @@ public:
 	}
 	
 	scalar operator[](int idx) const {return vec[idx]; }
+	
+	friend std::ostream& operator<<(std::ostream &os, const S2<scalar>& vec){
+		return os << vec.vec.transpose() << " ";
+	}
+	friend std::istream& operator>>(std::istream &is, S2<scalar>& vec){
+		for(int i=0; i<3; ++i)
+			is >> vec.vec[i];
+		vec.vec.normalize();
+		return is;
+	}
 	
 private:
 	/**

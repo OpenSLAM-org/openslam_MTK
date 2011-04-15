@@ -101,6 +101,20 @@ public:
 		pos.boxminus(MTK::subvector(ret, &trafo::pos), other.pos);
 	}
 	
+	friend std::ostream& operator<<(std::ostream &os, const trafo<RotationType, Trans1st, VectType> &tr){
+		if(Trans1st)
+			return os << tr.pos << " " << tr.orient;
+		else
+			return os << tr.orient << " " << tr.pos;
+	}
+	friend std::istream& operator>>(std::istream &is,  trafo<RotationType, Trans1st, VectType> &tr){
+		if(Trans1st)
+			return is >> tr.pos >> tr.orient;
+		else
+			return is >> tr.orient >> tr.pos;
+	}
+
+	
 	vect_type operator*(const vect_type& vec) const
 	{
 		return local2World(vec);

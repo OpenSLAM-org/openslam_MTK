@@ -57,7 +57,7 @@ template<class Manifold>
 struct traits {
 	typedef typename Manifold::scalar scalar;
 	enum {DOF = Manifold::DOF};
-	typedef vect<scalar, DOF> vectorized_type;
+	typedef vect<DOF, scalar> vectorized_type;
 	typedef Eigen::Matrix<scalar, DOF, DOF> matrix_type;
 };
 
@@ -129,7 +129,7 @@ void log(vectview<scalar, n> result,
 			// find the maximal entry:
 			int i;
 			vec.maxCoeff(&i);
-			result = scale * std::atan2(0, w) * vect<scalar, n>::Unit(i);
+			result = scale * std::atan2(0, w) * vect<n, scalar>::Unit(i);
 			return;
 		}
 		nv = tolerance<scalar>();

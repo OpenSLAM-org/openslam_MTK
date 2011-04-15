@@ -108,7 +108,7 @@ BOOST_AUTO_TEST_CASE( vect3 )
 {
 	scalar tol = 100*MTK::tolerance<scalar>();
 	scalar one = 1.0;
-	typedef MTK::vect<scalar,3> vect3;
+	typedef MTK::vect<3, scalar> vect3;
 	for(int i=0; i<16; ++i)
 	{
 		Eigen::Matrix<scalar, 3, 1> rand;

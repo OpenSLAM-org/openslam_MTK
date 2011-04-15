@@ -58,6 +58,8 @@
 #define MTK_CONSTRUCTOR_COPY( type, id) id(id)
 #define MTK_BOXPLUS(          type, id) __vec_p = id.boxplus(__vec_p, __scale);
 #define MTK_BOXMINUS(         type, id) __res_p = id.boxminus(__res_p, __oth.id);
+#define MTK_OSTREAM(          type, id) << __var.id << " "
+#define MTK_ISTREAM(          type, id) >> __var.id
 
 #define MTK_SUBVARLIST(seq) \
 BOOST_PP_FOR_1( \
@@ -124,15 +126,19 @@ struct name { \
 		) : \
 		MTK_TRANSFORM_COMMA(MTK_CONSTRUCTOR_COPY, entries) {}\
 	int getDOF() const { return DOF; } \
-	const scalar* boxplus(const MTK::vectview<const scalar, DOF> & __vec, scalar __scale = 1 ) { \
+	void boxplus(const MTK::vectview<const scalar, DOF> & __vec, scalar __scale = 1 ) { \
 		const scalar *__vec_p = __vec.data(); \
 		MTK_TRANSFORM(MTK_BOXPLUS, entries) \
-		return __vec_p; \
 	} \
-	scalar* boxminus(MTK::vectview<scalar,DOF> __res, const name& __oth) const { \
+	void boxminus(MTK::vectview<scalar,DOF> __res, const name& __oth) const { \
 		scalar *__res_p = __res.data(); \
 		MTK_TRANSFORM(MTK_BOXMINUS, entries) \
-		return __res_p; \
+	} \
+	friend std::ostream& operator<<(std::ostream& __os, const name& __var){ \
+		return __os MTK_TRANSFORM(MTK_OSTREAM, entries); \
+	} \
+	friend std::istream& operator>>(std::istream& __is, name& __var){ \
+		return __is MTK_TRANSFORM(MTK_ISTREAM, entries); \
 	} \
 };
 

@@ -20,7 +20,7 @@ template<class Manifold>
 void check_equal(const Manifold &x, const Manifold &y)
 {
 	typedef typename Manifold::scalar scalar;
-	typedef MTK::vect<scalar, Manifold::DOF> vect_type;
+	typedef MTK::vect<Manifold::DOF, scalar> vect_type;
 	scalar tol = MTK::tolerance<scalar>();
 	vect_type delta;
 	
@@ -37,7 +37,7 @@ template<class Manifold>
 void check_not_equal(const Manifold &x, const Manifold &y)
 {
 	typedef typename Manifold::scalar scalar;
-	typedef MTK::vect<scalar, Manifold::DOF> vect_type;
+	typedef MTK::vect<Manifold::DOF, scalar> vect_type;
 	scalar tol = MTK::tolerance<scalar>();
 	vect_type delta;
 	
@@ -56,7 +56,7 @@ template<class Manifold>
 void check_axiom_zero(const Manifold &x)
 {
 	typedef typename Manifold::scalar scalar;
-	typedef MTK::vect<scalar, Manifold::DOF> vect_type;
+	typedef MTK::vect<Manifold::DOF, scalar> vect_type;
 	scalar tol = MTK::tolerance<scalar>();
 	vect_type delta;
 	x.boxminus(delta, x);
@@ -73,7 +73,8 @@ void check_axiom_zero(const Manifold &x)
 template<class Manifold>
 void check_axiom_plus_minus(const Manifold &x, const Manifold &y)
 {
-	typedef MTK::vect<typename Manifold::scalar, Manifold::DOF> vect_type;
+	typedef typename Manifold::scalar scalar;
+	typedef MTK::vect<Manifold::DOF, scalar> vect_type;
 	vect_type delta;
 	y.boxminus(delta, x);
 	Manifold z = x;
@@ -89,7 +90,7 @@ template<class Manifold, class vector>
 void check_minus_le_maxnorm(const Manifold &x, const vector &v, const typename Manifold::scalar &maxNorm)
 {
 	typedef typename Manifold::scalar scalar;
-	typedef MTK::vect<scalar, Manifold::DOF> vect_type;
+	typedef MTK::vect<Manifold::DOF, scalar> vect_type;
 	scalar tol = MTK::tolerance<scalar>();
 	vect_type delta = v;
 	delta.normalize();
@@ -110,7 +111,7 @@ template<class Manifold, class vector>
 void check_axiom_minus_plus(const Manifold &x, const vector &v)
 {
 	typedef typename Manifold::scalar scalar;
-	typedef MTK::vect<scalar, Manifold::DOF> vect_type;
+	typedef MTK::vect<Manifold::DOF, scalar> vect_type;
 	scalar tol = MTK::tolerance<scalar>();
 	vect_type delta = v;
 	for(scalar i=0; i < 10.0; i+=1.0/16.0)
@@ -131,7 +132,7 @@ template<class Manifold, class vector>
 void check_axiom_minus_plus(const Manifold &x, const vector &v, const double &maxNorm)
 {
 	typedef typename Manifold::scalar scalar;
-	typedef MTK::vect<scalar, Manifold::DOF> vect_type;
+	typedef MTK::vect<Manifold::DOF, scalar> vect_type;
 	scalar tol = MTK::tolerance<scalar>();
 	vect_type delta = v;
 	delta.normalize();
@@ -149,7 +150,7 @@ template<class Manifold, class vector>
 void check_axiom_triangle(const Manifold &x, const vector &d1, const vector &d2)
 {
 	typedef typename Manifold::scalar scalar;
-	typedef MTK::vect<scalar, Manifold::DOF> vect_type;
+	typedef MTK::vect<Manifold::DOF, scalar> vect_type;
 	scalar tol = MTK::tolerance<scalar>();
 	//vect_type delta = v;
 	for(double i=0; i <= 10; i+=0.5)
