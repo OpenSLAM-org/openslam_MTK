@@ -34,22 +34,23 @@
 
 // MTK's pose and orientation definition:
 #include <mtk/types/pose.hpp>
-#include <mtk/types/SOn.h>
+#include <mtk/types/SOn.hpp>
 
 // Main SLoM class:
-#include <Estimator.h>
+#include <slom/Estimator.hpp>
 // CallBack class for progress/debug output
-#include <CallBack.h>
+#include <slom/CallBack.hpp>
 // AutoConstruct macros to define measurements
-#include <slom/tools/AutoConstruct.h>
+#include <slom/BuildMeasurement.hpp>
 // CholeskyCovariance to apply Covariance/Information-matrix
-#include <tools/CholeskyCovariance.h>
+#include <slom/CholeskyCovariance.hpp>
 // Simple timing class
-#include <tools/TicToc.h>
+#include <slom/TicToc.hpp>
 
+#include <vector>
 
 // We can't use types having a comma inside AutoConstruct macros :(
-typedef MTK::vect<double,3> vec3;
+typedef MTK::vect<3, double> vec3;
 typedef MTK::SO3<double> SO3;
 
 
@@ -93,14 +94,17 @@ SLOM_IMPLEMENT_MEASUREMENT(Odo, ret) // Odo is the name of the measurement,
 
 // Method to read odometry (needs to be implemented somewhere)
 bool getOdometry(Pose::vect_type& trans, Pose::rotation_type& rot, 
-                 SLOM::CholeskyCovariance<Pose::DOF>& cov);
+                 SLOM::CholeskyCovariance<Pose::DOF>& cov){
+	return false;
+}
 
 
 int main()
 {
 	// create Estimator, usually GaussNewton is a good choice;
 	// use Parameters (SLOM::Levenberg, initalLambda) for rank-deficient problems
-	SLOM::Estimator est(SLOM::GaussNewton);
+	SLOM::Estimator est(SLOM::Estimator::GaussNewton);
+	typedef SLOM::VarID<Pose> PoseID;
 	
 	// Variable-storage can now be done by Estimator:
 	PoseID lastPose = est.insertRV(Pose(), false); // don't optimize first pose
@@ -117,12 +121,13 @@ int main()
 	{
 		Pose odo(trans, rot); // Construct odometry from rotation and translation
 		// Calculate next pose from last pose and odometry and insert into Estimator
-		PoseID currentPose = est.insertRV(lastPose->local2world(odo));
+		PoseID currentPose = est.insertRV(lastPose->local2World(odo));
 		// MeasID can be used to remove measurements (otherwise it can be ignored)
-		SLOM::MeasID<Odometry> odoMeas = 
+		//Odo::id x;
+		SLOM::MeasID<Odo> odoMeas = 
 			est.insertMeasurement(
 				// Parameters for Odometry constructor in order of definition:
-				Odometry(lastPose, currentPose, odo, cov)
+				Odo(lastPose, currentPose, odo, cov)
 			);
 		// store ID of current pose (only required for data output)
 		poses.push_back(currentPose);
@@ -133,7 +138,7 @@ int main()
 	int kMax = 50;
 	for(int k=1; k<=kMax; k++){
 		std::cout << "Step " << k << ": ";
-		double gain = e.optimizeStep();
+		double gain = est.optimizeStep();
 		
 		if( 0 <= gain && gain < 1e-9) break;
 	}
@@ -142,9 +147,8 @@ int main()
 	for(std::vector<PoseID >::const_iterator it = poses.begin(); it!= poses.end(); ++it)
 	{
 		const Pose& p  = **it; // derefence from iterator to PoseID& and to Pose&
-		// output pose (preferably into a file ...)
-		std::cout << p.pos.transpose() << " " 
-		          << p.orient.coeffs().transpose() << std::endl;
+		// output pose (preferably into a file ...) using automatically generated streaming operator
+		std::cout << p << std::endl;
 	}
 	
 	return 0;
