@@ -48,24 +48,13 @@
 #include <Eigen/QR>
 
 #include "lapack/cholesky.hpp"
+#include "traits/dof.hpp"
+#include "util.hpp"
 
 namespace ukfom {
 	
 // import most common Eigen types 
 USING_PART_OF_NAMESPACE_EIGEN
-
-template <typename scalar_type>
-static bool accept_any_mahalanobis_distance(const scalar_type &mahalanobis2)
-{
-	return true;
-}
-
-template<typename T>
-static T
-id(const T &x)
-{
-	return x;
-}
 
 template <typename state>
 class ukf {
@@ -89,6 +78,12 @@ public:
 	{
 	}
 
+	template<typename ProcessModel>
+	void predict(ProcessModel g, const cov &R)
+	{
+		predict(g, boost::bind(id<cov>, R));
+	}
+
 	template<typename ProcessModel, typename ProcessNoiseCovariance>
 	void predict(ProcessModel g, ProcessNoiseCovariance R)
 	{
@@ -104,25 +99,30 @@ public:
 		sigma_ = sigma_points_cov<state::DOF>(mu_, X) + R();
 	}
 
-	template<typename ProcessModel>
-	void predict_(ProcessModel g, const cov &R)
-	{
-		predict(g, boost::bind(id<cov>, R));
-	}
-
-	template<int measurement_rows,
-			 typename Measurement,
+	template<typename Measurement,
 			 typename MeasurementModel,
 			 typename MeasurementNoiseCovariance>
 	void update(const Measurement &z,
 				MeasurementModel h,
 				MeasurementNoiseCovariance Q)
 	{
-		update<measurement_rows>(z, h, Q, accept_any_mahalanobis_distance<scalar_type>);
+		update(z, h, Q,
+			   accept_any_mahalanobis_distance<scalar_type>);
 	}
 	
-	template<int measurement_rows,  //FIXME measurement_rows can be obtained from Measurement::DOF
-			 typename Measurement,
+	template<typename Measurement,
+			 typename MeasurementModel>
+	void update(const Measurement &z,
+				MeasurementModel h,
+				const Eigen::Matrix<scalar_type, dof<Measurement>::value, dof<Measurement>::value> &Q)
+	{
+		typedef Eigen::Matrix<scalar_type, dof<Measurement>::value, dof<Measurement>::value> measurement_cov;
+		update(z, h,
+			   boost::bind(id<measurement_cov>, Q),
+			   accept_any_mahalanobis_distance<scalar_type>);
+	}
+	
+	template<typename Measurement,
 			 typename MeasurementModel,
 			 typename MeasurementNoiseCovariance,
 			 typename MahalanobisTest>
@@ -131,6 +131,7 @@ public:
 				MeasurementNoiseCovariance Q,
 				MahalanobisTest mt)
 	{
+		const static int measurement_rows = dof<Measurement>::value;
 		typedef Measurement measurement;
 		typedef Eigen::Matrix<scalar_type, measurement_rows, 1> vectorized_measurement;
 		typedef std::vector<measurement> measurement_vector;
