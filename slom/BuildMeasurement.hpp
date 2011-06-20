@@ -137,8 +137,9 @@ struct add_const_ref{
 
 }  // namespace SLOM
 
-#define SLOM_CLOSE_MEASUREMENT_EXTENDIBLE(name) ;}; \
-	typedef SLOM::MeasID<name> name ## _id;
+#define SLOM_CLOSE_MEASUREMENT_EXTENDIBLE(name); \
+	typedef SLOM::MeasID<name> id; \
+};
 
 #define SLOM_VAR_REF_TYPE(type) SLOM::internal::IMeasurement_Holder::VarRef<type>
 #define SLOM_VAR_ID_TYPE(type) SLOM::VarID<type>

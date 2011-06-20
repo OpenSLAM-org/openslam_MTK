@@ -43,7 +43,6 @@
 
 #include "vectview.hpp"
 
-// FIXME there must be some 'cleaner' way to do this:
 #ifndef M_PI
 #define M_PI  3.1415926535897932384626433832795
 #endif
@@ -115,8 +114,6 @@ scalar exp(vectview<scalar, n> result, vectview<const scalar, n> vec, const scal
  * @param vec    vector part of input
  * @param scale  scale result by this value
  * @param plus_minus_periodicity if true values @f$[w, vec]@f$ and @f$[-w, -vec]@f$ give the same result 
- * 
- * @bug check for result of @f$ \log([-1, 0]) @f$ with @c plus_minus_periodicity == false.
  */
 template<class scalar, int n>
 void log(vectview<scalar, n> result,
@@ -129,7 +126,7 @@ void log(vectview<scalar, n> result,
 			// find the maximal entry:
 			int i;
 			vec.maxCoeff(&i);
-			result = scale * std::atan2(0, w) * vect<n, scalar>::Unit(i);
+			result = scale * std::atan2(nv, w) * vect<n, scalar>::Unit(i);
 			return;
 		}
 		nv = tolerance<scalar>();

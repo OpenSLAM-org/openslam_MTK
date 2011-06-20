@@ -142,7 +142,7 @@ void check_axiom_minus_plus(const Manifold &x, const vector &v, const double &ma
 		y.boxplus(delta, i);
 		typename vect_type::base diff;
 		y.boxminus(diff, x);
-		BOOST_CHECK_CLOSE_FRACTION(diff, (i*delta).eval(), tol);
+		MTK_CHECK_CLOSE(diff, (i*delta).eval(), tol);
 	}
 }
 
