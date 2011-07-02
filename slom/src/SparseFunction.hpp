@@ -61,9 +61,11 @@ namespace SLOM {
 template<class M>
 class VarID : private internal::RVList::id<M>{
 	typedef internal::RVList::id<M> base;
-	//	using  internal::RVList::id<M>::ptr; // this line makes ptr public in g++ 4.3.2 (which seems to be a bug)
+	//	using base::ptr; // this line makes ptr public in g++ 4.3.2 (which seems to be a bug)
 	friend class SparseFunction;
-	friend class internal::IMeasurement_Holder::VarRef<M>;
+	//VarRef needs to access base (actually only VarRef<M, int>):
+	template<class, int>
+	friend class internal::IMeasurement_Holder::VarRef;
 public:
 	VarID(const base &m) : base(m) {}
 	VarID() : base(0) {}
@@ -73,6 +75,10 @@ public:
 	{
 		return base::ptr != 0;
 	}
+	
+	bool getsOptimized() const {
+		return base::ptr && base::ptr->optimize;
+	}
 	template<class M2>
 	bool operator<(const VarID<M2>& v) const { return base::ptr < v.ptr; }
 	
@@ -80,8 +86,6 @@ public:
 	const M* operator->() const { return &base::ptr->backup;}
 };
 
-template<class M>
-internal::IMeasurement_Holder::VarRef<M>::VarRef(const SLOM::VarID<M> &id) : base(id.ptr) {}
 
 template<class Measurement>
 class MeasID : private internal::MeasurementList::id<Measurement> {
@@ -181,7 +185,9 @@ class SparseFunction {
 	template<class Manifold>
 	VarID<Manifold> insertRV(const Manifold& m, bool optimize = true){
 		RVList &list = optimize ? variables : fixed_variables; 
-		VarID<Manifold> id = list.insert(new IRVHolder::holder<Manifold>(m, optimize));
+		IRVHolder::holder<Manifold>* ptr = new IRVHolder::holder<Manifold>(m, optimize);
+		VarID<Manifold> id = list.insert(ptr);
+		ptr->isRegistered = true;
 		_structureChanged |= optimize;
 		return id;
 	}
@@ -189,6 +195,7 @@ class SparseFunction {
 	template<class Manifold>
 	VarID<Manifold> reinitRV(VarID<Manifold> id, const Manifold& m) {
 		id.ptr->reset(m);
+		_valuesChanged = true;
 		return id;
 	}
 	

@@ -55,8 +55,11 @@ void testCholesky(const Eigen::Matrix<double, dim, dim> &sigma)
 	}
 	
 	// now check what happens if L was already decomposed:
+#if MTK_EIGEN < 300
 	L = sigma.template part<Eigen::LowerTriangular>();
-	
+#else
+	L = sigma.template triangularView<Eigen::Lower>();
+#endif
 	Cov c2(L.data(), SLOM::CholeskyMode::COPY_UPPER_FULL);
 	for(int i=0; i<dim; ++i)
 	{

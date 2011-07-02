@@ -126,7 +126,7 @@ void log(vectview<scalar, n> result,
 			// find the maximal entry:
 			int i;
 			vec.maxCoeff(&i);
-			result = scale * std::atan2(nv, w) * vect<n, scalar>::Unit(i);
+			result = scale * std::atan2(0, w) * vect<n, scalar>::Unit(i);
 			return;
 		}
 		nv = tolerance<scalar>();

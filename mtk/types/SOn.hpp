@@ -38,10 +38,11 @@
 #ifndef SON_H_
 #define SON_H_
 
-#include <Eigen/Geometry>
 
 #include "vect.hpp"
 #include "../src/mtkmath.hpp"
+
+#include <Eigen/Geometry>
 
 namespace MTK {
 

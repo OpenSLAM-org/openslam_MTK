@@ -65,7 +65,7 @@ Further (more theoretical) details are provided in:
  *
  *  Authors: 
  *   - Christoph Hertzberg <chtz@informatik.uni-bremen.de> and
- *   - René Wagner <rene.wagner@dfki.de>
+ *   - Ren&eacute; Wagner <rene.wagner@dfki.de>
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted provided that the following conditions
@@ -101,7 +101,7 @@ Further (more theoretical) details are provided in:
 
 @biblio
  @bibentry{Hertzberg2008, C. Hertzberg, A Framework for Sparse\, Non-Linear Least Squares Problems on Manifolds, Diplomarbeit, Univ. Bremen 2008}
- @bibentry{Hertzberg2011, C. Hertzberg\, R. Wagner\, U. Frese\, L. Schröder, Integrating Generic Sensor Fusion Algorithms with Sound State Representations through Encapsulation of Manifolds, Information Fusion, to appear}
+ @bibentry{Hertzberg2011, C. Hertzberg\, R. Wagner\, U. Frese\, L. Schr&ouml;der, Integrating Generic Sensor Fusion Algorithms with Sound State Representations through Encapsulation of Manifolds, Information Fusion, to appear}
  @bibentry{Lee2003, J.M. Lee, Introduction to Smooth Manifolds, volume 218 of Graduate Texts in Mathematics, Springer Verlag 2003}
 @endbiblio
 

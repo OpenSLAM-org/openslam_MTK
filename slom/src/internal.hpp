@@ -43,27 +43,31 @@
 #include "indexed_list.hpp"
 #include <deque>
 #include <boost/bind.hpp>
-
+#include "../../mtk/src/vectview.hpp"
 
 namespace SLOM {
 
 template<class Manifold>
 class VarID;
+class SparseFunction;
 
 namespace internal {
 
 
+
 struct IMeasurement_Holder;
+
 struct IRVHolder : public indexed_list_hook
 {
 	typedef std::deque<const IMeasurement_Holder*> measurement_container;
 	measurement_container measurements; // maybe a single linked pointer list?
-	bool optimize; // TODO maybe replace by a bitfield? -- this would limit DOF to 32 (or would cause enormous overhead)
+	bool optimize;
+	bool isRegistered;
 	
 	template<class M>
 	struct holder;
 	
-	IRVHolder(bool optimize) : optimize(optimize) {}
+	IRVHolder(bool optimize) : optimize(optimize), isRegistered(false) {}
 	
 	bool has_measurements() const {
 		return !measurements.empty();
@@ -73,19 +77,19 @@ struct IRVHolder : public indexed_list_hook
 	 * Registers a Measurement and returns the DOFs if this variable is to be optimized.
 	 */
 	int registerMeasurement(const IMeasurement_Holder* m){
+		assert (isRegistered);
 		measurements.push_back(m);
-		// if optimize is a bitfield, replace by count_bits():
 		return optimize ? getDOF() : 0;
 	}
-
+	
 	/**
 	 * Unregisters a Measurement and returns the DOFs if this variable is to be optimized.
 	 */
 	int unregisterMeasurement(const IMeasurement_Holder* m){
+		assert (isRegistered);
 		measurement_container::iterator it = std::find(measurements.begin(), measurements.end(), m);
 		assert(it != measurements.end() && "Tried to remove an unregistered measurement!"); 
 		measurements.erase(it);
-		// if optimize is a bitfield, replace by count_bits():
 		return optimize ? getDOF() : 0;
 	}
 	
@@ -113,13 +117,16 @@ typedef indexed_list<IRVHolder> RVList;
 struct IMeasurement_Holder : public indexed_list_hook
 {
 	virtual ~IMeasurement_Holder() {}
+	virtual int getDim() const = 0;
+	virtual double* eval(double*, bool numerical_jacobian) const = 0;
+	
 	template<class M>
 	struct holder;
-	template<class M>
+	template<class Type, int idx>
 	struct VarRef;
+protected:
+	friend class SLOM::SparseFunction;
 	
-	virtual double* eval(double*, bool numerical_jacobian) const = 0;
-	virtual int getDim() const = 0;
 	
 	void register_at_variables(int& count, IRVHolder* rv) const {
 		count += rv->registerMeasurement(this);
@@ -132,7 +139,8 @@ struct IMeasurement_Holder : public indexed_list_hook
 template<class M>
 class IRVHolder::holder : public IRVHolder
 {
-	friend class IMeasurement_Holder::VarRef<M>;
+	template<class, int>
+	friend class IMeasurement_Holder::VarRef;
 	friend class VarID<M>;
 	M var;
 	M backup;
@@ -157,14 +165,14 @@ public:
 };
 
 
-template<class M>
-struct IMeasurement_Holder::VarRef : public RVList::id<M>{
-	typedef RVList::id<M> base;
+template<class M, int idx_in_Measurement>
+struct IMeasurement_Holder::VarRef : public SLOM::VarID<M>{
+	enum { IDX = idx_in_Measurement };
+	typedef SLOM::VarID<M> base;
 	using base::ptr;
-	VarRef(const base &m) : base(m) {}
-	VarRef(const VarID<M> &id);
+	VarRef(const base &m) : base(m) {assert(m.ptr->isRegistered);}
 	
-	VarRef() {}
+//	VarRef() {} // no standard constructor necessary!
 	
 	const M& operator*()  const { return  ptr->var;}
 	const M* operator->() const { return &ptr->var;}

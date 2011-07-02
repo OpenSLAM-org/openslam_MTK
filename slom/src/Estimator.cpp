@@ -45,7 +45,6 @@
 
 #include <iostream>
 
-#include <Eigen/Array>
 
 
 #include "../CallBack.hpp"
@@ -119,23 +118,22 @@ bool Estimator::choleskySolve(double *delta, const double *res){
 	const cs *JtJ = func.get_JtJ();
 	
 	
-	csn *N = 0;
-	{
+	if (true) { 
 		CALLBACK_START(choleskyDecompose);
-		N = cs_di_chol (JtJ, symbolic) ;                    /* numeric Cholesky factorization */
+		csn *N = cs_di_chol (JtJ, symbolic) ;                    /* numeric Cholesky factorization */
 		if(!N) return false;
 		
 		double *x = workspace.data();
+		assert (workspace.size()>=n);
+		assert (n==N->L->n);		
 		cs_ipvec (symbolic->pinv, delta, x, n) ;   /* x = P*b */
 		cs_lsolve (N->L, x) ;           /* x = L\x */
 		cs_ltsolve (N->L, x) ;          /* x = L'\x */
 		cs_pvec (symbolic->pinv, x, delta, n) ;    /* b = P'*x */
 		cs_nfree (N) ;
+		return true;
 	}
-	
-//	int ok = cs_di_cholsol(1, JtJ, delta);
-	
-	return true;
+	else return cs_di_cholsol(1, JtJ, delta);	
 }
 
 
@@ -161,8 +159,9 @@ void Estimator::init(){
 	}
 	
 	res.resize(size.first);
+	newRes.resize(size.first);
 	lastRSS = -1;
-	workspace.resize(size.first);
+	workspace.resize(size.second);
 	delta.resize(size.second);
 }
 
@@ -211,7 +210,7 @@ void Estimator::calculate_delta()
 double Estimator::apply_delta(double scale){
 	func.apply_delta(delta, scale);
 	// calculate the new RSS:
-	return evaluate(workspace.data());
+	return evaluate(newRes.data());
 }
 
 double Estimator::store_or_restore(double newRSS, scoped_callback& cb)
@@ -224,7 +223,7 @@ double Estimator::store_or_restore(double newRSS, scoped_callback& cb)
 		// Store modified variables permanently, current RSS to res, and reduce lamda.
 		func.store_or_restore(true);
 		
-		workspace.swap(res);
+		res.swap(newRes);
 		lastRSS = newRSS;
 		lamda *= sqrt(0.1);
 	} else {
@@ -245,7 +244,7 @@ double Estimator::optimizeStep(bool linear_refine){
 	// TODO factor out into Algorithm class
 	
 	
-	// calculate delta = (J^T * J + lambda*I) \ J^T * res:
+	// calculate delta = (J^T * J + lambda*I) \ (J^T * res):
 	calculate_delta();
 	
 	double newRSS;

@@ -59,8 +59,9 @@ template<class _scalar = double>
 struct S2 {
 	
 	typedef _scalar scalar;
-	typedef typename vect<3, scalar>::base vect_type;
-	typedef typename vect<2, scalar>::base vec2;
+	typedef vect<3, scalar> vect_type;
+	typedef typename vect_type::base vec3;
+	//typedef typename vect<2, scalar>::base vec2;
 	enum {DOF=2};
 	
 private:
@@ -70,9 +71,9 @@ private:
 	vect_type vec;
 	
 public:
-	S2() : vec(1, 0, 0) { }
+	S2() : vec(vec3(1, 0, 0)) { }
 	
-	S2(const scalar &x, const scalar &y, const scalar &z) : vec(x, y, z) {
+	S2(const scalar &x, const scalar &y, const scalar &z) : vec(vec3(x, y, z)) {
 		vec.normalize();
 	}
 	
@@ -83,14 +84,14 @@ public:
 	void boxplus(MTK::vectview<const scalar, 2> delta, scalar scale=1) {
 		
 		vect_type exp_delta;
-		exp_delta[0] = MTK::exp(MTK::vectview<scalar, 2>(exp_delta.template end<2>()), delta, scale);
+		exp_delta[0] = MTK::exp(MTK::vectview<scalar, 2>(exp_delta.template tail<2>()), delta, scale);
 		vec = rotate(exp_delta, true);
 	}
 	
 	void boxminus(MTK::vectview<scalar, 2> res, const S2<scalar>& other) const {
-		vect_type rotated = other.rotate(vec, false);
+		const vect_type rotated = other.rotate(vec, false);
 		
-		MTK::log<scalar, 2>(res, rotated[0], rotated.template end<2>(), 1.0, false);
+		MTK::log(res, rotated[0], rotated.template tail<2>(), scalar(1.0), false);
 	}
 	
 	operator const vect_type&() const{

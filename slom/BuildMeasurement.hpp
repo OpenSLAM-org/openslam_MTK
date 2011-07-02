@@ -112,7 +112,7 @@ SLOM_CLOSE_MEASUREMENT_EXTENDIBLE(name)
 #define SLOM_BUILD_MEASUREMENT_EXTENDIBLE(name, dim, variables, data) \
 struct name { \
 	enum {DIM = dim}; \
-	MTK_TRANSFORM(SLOM_MSRMNT_GENERATE_VARLIST, variables) \
+	SLOM_VARREFLIST(variables) \
 	MTK_TRANSFORM(SLOM_MSRMNT_GENERATE_DATALIST, data)     \
 	name( \
 		MTK_TRANSFORM_COMMA(SLOM_MSRMNT_CONSTRUCTOR_ARG, variables) \
@@ -121,35 +121,57 @@ struct name { \
 		MTK_TRANSFORM_COMMA(SLOM_MSRMNT_GENERATE_CONSTRUCTOR, variables) \
 		MTK_TRANSFORM(SLOM_MSRMNT_GENERATE_CONSTRUCTOR_D, data) {}\
 	template<class Func> \
-	void traverse_variables(Func __function) { \
+	void traverse_variables(Func __function) const { \
 		MTK_TRANSFORM(SLOM_MSRMNT_GENERATE_TRAVERSE, variables)} \
 	void eval(MTK::vectview<double, DIM> __ret, bool numerical_jacobian) const
 
 #ifndef PARSED_BY_DOXYGEN
 //////// internals //////
 
+#define SLOM_VARREFLIST(seq) \
+BOOST_PP_FOR_1( \
+		( \
+				BOOST_PP_SEQ_SIZE(seq), \
+				BOOST_PP_SEQ_HEAD(seq), \
+				BOOST_PP_SEQ_TAIL(seq) (~), \
+				0 ),\
+		MTK_ENTRIES_TEST, MTK_ENTRIES_NEXT, SLOM_VARREF_OUTPUT)
+
+#define SLOM_VARREF_OUTPUT(r, state) SLOM_VARREF_OUTPUT_I state
+#define SLOM_VARREF_OUTPUT_I(s, head, seq, idx) \
+	MTK_APPLY_MACRO_ON_TUPLE(~, \
+		BOOST_PP_IF(BOOST_PP_DEC(s), SLOM_OUPUT_VARREF, SLOM_OUPUT_VARREF_AND_ENUM), \
+		( BOOST_PP_TUPLE_REM_2 head, idx)) 
+
+#define SLOM_OUPUT_VARREF(type, id, idx) \
+	SLOM_VAR_REF_TYPE(type, idx) id; 
+#define SLOM_OUPUT_VARREF_AND_ENUM(type, id, idx) \
+	SLOM_OUPUT_VARREF(type, id, idx) \
+	enum {DEPEND = type::DOF + idx}; \
+
+
 namespace SLOM {
+namespace internal {
 
 template<class T>
 struct add_const_ref{
 	typedef typename boost::add_reference<typename boost::add_const<T>::type>::type type;
 };
 
+}  // namespace internal
 }  // namespace SLOM
 
 #define SLOM_CLOSE_MEASUREMENT_EXTENDIBLE(name); \
 	typedef SLOM::MeasID<name> id; \
 };
 
-#define SLOM_VAR_REF_TYPE(type) SLOM::internal::IMeasurement_Holder::VarRef<type>
+#define SLOM_VAR_REF_TYPE(type, idx) SLOM::internal::IMeasurement_Holder::VarRef<type, idx>
 #define SLOM_VAR_ID_TYPE(type) SLOM::VarID<type>
 
-#define SLOM_MSRMNT_GENERATE_VARLIST(type, id) SLOM_VAR_REF_TYPE(type) id;
+#define SLOM_MSRMNT_GENERATE_VARLIST(type, id) SLOM_VAR_REF_TYPE(type, 0) id;
 #define SLOM_MSRMNT_GENERATE_DATALIST(type, id) type id;
 #define SLOM_MSRMNT_CONSTRUCTOR_ARG(type, id) SLOM_VAR_ID_TYPE(type) id
-#define SLOM_MSRMNT_CONSTRUCTOR_ARG_D(type_, id) , boost::add_reference<boost::add_const<type_ >::type>::type id
-//#define SLOM_MSRMNT_CONSTRUCTOR_ARG_D(type_, id) , typename SLOM::add_const_ref<type_ >::type id
-//#define SLOM_MSRMNT_CONSTRUCTOR_ARG_D(type_, id) , const type_ & id
+#define SLOM_MSRMNT_CONSTRUCTOR_ARG_D(type_, id) , SLOM::internal::add_const_ref<type_ >::type id
 #define SLOM_MSRMNT_GENERATE_CONSTRUCTOR(type, id) id(id)
 #define SLOM_MSRMNT_GENERATE_CONSTRUCTOR_D(type, id) , id(id)
 #define SLOM_MSRMNT_GENERATE_DEPEND(type, id) + type::DOF

@@ -95,7 +95,7 @@ void setDiagonal(Eigen::Matrix<typename Base::scalar, Base::DOF, Base::DOF> &cov
  * lets you modify mixed covariance entries in a bigger covariance matrix.
  */
 template<class Base, class T1, int idx1, class T2, int idx2>
-typename Eigen::BlockReturnType<Eigen::Matrix<typename Base::scalar, Base::DOF, Base::DOF>, T1::DOF, T2::DOF>::Type
+typename MTK::internal::CovBlock<Base, T1, T2>::Type
 subblock(Eigen::Matrix<typename Base::scalar, Base::DOF, Base::DOF> &cov, 
 		MTK::SubManifold<T1, idx1> Base::*, MTK::SubManifold<T2, idx2> Base::*)
 {
@@ -111,7 +111,7 @@ subblock(Eigen::Matrix<typename Base::scalar, Base::DOF, Base::DOF> &cov,
  * lets you modify covariance entries in a bigger covariance matrix.
  */
 template<class Base, class T, int idx>
-typename Eigen::BlockReturnType<Eigen::Matrix<typename Base::scalar, Base::DOF, Base::DOF>, T::DOF, T::DOF>::Type
+typename MTK::internal::CovBlock<Base, T, T>::Type
 subblock(Eigen::Matrix<typename Base::scalar, Base::DOF, Base::DOF> &cov, 
 		MTK::SubManifold<T, idx> Base::*)
 {
@@ -145,7 +145,7 @@ template<class Base, class T, int idx>
 vectview<const typename Base::scalar, T::DOF>
 subvector(const vectview<const typename Base::scalar, Base::DOF> cvec, SubManifold<T, idx> Base::*)
 {
-	return cvec.data() + idx;
+	return cvec.template segment<T::DOF>(idx);
 }
 
 //@}

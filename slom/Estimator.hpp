@@ -87,7 +87,7 @@ private:
 	csn* numeric;  // numeric decomposition of jacobian or JtJ
 	
 	// the current residuum:
-	Eigen::VectorXd res;
+	Eigen::VectorXd res, newRes;
 	
 	// workspace for solving:
 	Eigen::VectorXd workspace;
@@ -230,6 +230,7 @@ public:
 	 */
 	double getRSS()
 	{
+		init();
 		if(lastRSS < 0){
 			lastRSS = evaluate(res.data());
 		}
@@ -322,7 +323,10 @@ public:
 	 */
 	template<class Manifold>
 	bool removeRV(const VarID<Manifold> &id){
-		return func.removeRV(id);
+		bool success = func.removeRV(id);
+		if(!success)
+			std::cerr << "Tried to remove a variable still in use!" << std::endl;
+		return success;
 	}
 
 	/**

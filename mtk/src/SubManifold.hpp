@@ -50,9 +50,8 @@ namespace MTK {
  * @ingroup SubManifolds
  * Helper class for compound manifolds. 
  * This class wraps a manifold T and provides an enum IDX refering to the 
- * index of the SubManifold within the compound manifold. It also provides
- * encapsulations of boxplus and boxminus to be used for stacked operations.
- * 
+ * index of the SubManifold within the compound manifold. 
+ *  
  * Memberpointers to a submanifold can be used for @ref SubManifolds "functions accessing submanifolds".
  * 
  * @tparam T   The manifold type of the sub-type
@@ -64,33 +63,13 @@ struct SubManifold : public T
 	enum {IDX = idx /*!< index of the sub-type within the compound manifold */ };
 	//! manifold type
 	typedef T type;
-	//! scalar type
-	typedef typename T::scalar scalar;
+	
 	//! Construct from internal type
 	SubManifold(const T& t) : T(t) {}
 	
 	//! inherit assignment operator
 	using T::operator=;
 	
-	const scalar* boxplus(const scalar *delta, scalar scale=1) 
-	{
-		T::boxplus(delta, scale);
-		return delta + T::DOF;
-	}
-	void boxplus(vectview<const scalar, T::DOF> delta, scalar scale = 1)
-	{
-		boxplus(delta.data(), scale);
-	}
-	
-	scalar* boxminus(scalar *res, const T& other) const 
-	{
-		T::boxminus(res, other);
-		return res + T::DOF;
-	}
-	void boxminus(vectview<scalar, T::DOF> res, const T& other) const
-	{
-		boxminus(res.data(), other);
-	}
 };
 
 }  // namespace MTK

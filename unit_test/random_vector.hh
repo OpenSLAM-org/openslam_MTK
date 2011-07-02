@@ -15,8 +15,8 @@
 #include <boost/random/uniform_real.hpp>
 //#include <boost/random/uniform_on_sphere.hpp>
 
-#include <Eigen/Core>
-#include <Eigen/Array>
+#include <mtk/src/eigen.hpp>
+
 /**
  * Generate normal or uniform distributed random vectors of arbitrary dimension
  */
@@ -24,6 +24,11 @@
 template<class scalar, class RandomGenerator = boost::mt19937>
 struct random_vector
 {
+	random_vector(unsigned int seed) 
+		: rng_(RandomGenerator(seed)), 
+		  uniform(rng_, boost::uniform_real<scalar>(-1.0, 1.0)),
+		  normal(rng_, boost::normal_distribution<scalar>())
+	{}
 	random_vector(const RandomGenerator &rng = RandomGenerator()) 
 		: rng_(rng), 
 		  uniform(rng_, boost::uniform_real<scalar>(-1.0, 1.0)), 

@@ -37,13 +37,13 @@ public:
 	explicit    close_at_tolerance( percent_tolerance_t<ToleranceBaseType>  tolerance, 
 			floating_point_comparison_type          fpc_type = FPC_STRONG ) 
 	: p_fraction_tolerance( tt_detail::fpt_abs( static_cast<FPT>(0.01)*tolerance.m_value ) )
-	, p_strong_or_weak( false && fpc_type ==  FPC_STRONG )
+	, p_strong_or_weak( fpc_type ==  FPC_STRONG )
 	{}
 	template<typename ToleranceBaseType>
 	explicit    close_at_tolerance( fraction_tolerance_t<ToleranceBaseType> tolerance, 
 			floating_point_comparison_type          fpc_type = FPC_STRONG ) 
 	: p_fraction_tolerance( tt_detail::fpt_abs( tolerance.m_value ) )
-	, p_strong_or_weak( false && fpc_type ==  FPC_STRONG )
+	, p_strong_or_weak( fpc_type ==  FPC_STRONG )
 	{}
 	
 	bool        operator()( comp_type left, comp_type right ) const
@@ -54,7 +54,7 @@ public:
 		
 		return p_strong_or_weak 
 		? (d1 <= p_fraction_tolerance && d2 <= p_fraction_tolerance) 
-				: (d1 <= p_fraction_tolerance || d2 <= p_fraction_tolerance || diff < p_fraction_tolerance);
+				: (d1 <= p_fraction_tolerance || d2 <= p_fraction_tolerance);
 	}
 	
 	// Public properties

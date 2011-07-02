@@ -81,12 +81,36 @@ struct vect : public Eigen::Matrix<_scalar, D, 1> {
 	
 	
 	friend std::ostream& operator<<(std::ostream &os, const vect<D, scalar>& v){
-		return os << v.transpose() << " ";
+		// Old versions of Eigen messed up with the streams flags, so do it manually:
+		for(int i=0; i<DOF; ++i)
+			os << v(i) << " ";
+		return os;
 	}
 	friend std::istream& operator>>(std::istream &is, vect<D, scalar>& v){
 		for(int i=0; i<DOF; ++i)
 			is >> v(i);
 		return is;
+	}
+	
+	template<int dim>
+	vectview<scalar, dim> tail(){
+		BOOST_STATIC_ASSERT(0< dim && dim <= DOF);
+		return base::data() + (DOF - dim);
+	}
+	template<int dim>
+	vectview<const scalar, dim> tail() const{
+		BOOST_STATIC_ASSERT(0< dim && dim <= DOF);
+		return base::data() + (DOF - dim);
+	}
+	template<int dim>
+	vectview<scalar, dim> head(){
+		BOOST_STATIC_ASSERT(0< dim && dim <= DOF);
+		return base::data();
+	}
+	template<int dim>
+	vectview<const scalar, dim> head() const{
+		BOOST_STATIC_ASSERT(0< dim && dim <= DOF);
+		return base::data();
 	}
 };
 

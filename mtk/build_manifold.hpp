@@ -56,8 +56,8 @@
 
 #define MTK_CONSTRUCTOR_ARG(  type, id) const type& id = type()
 #define MTK_CONSTRUCTOR_COPY( type, id) id(id)
-#define MTK_BOXPLUS(          type, id) __vec_p = id.boxplus(__vec_p, __scale);
-#define MTK_BOXMINUS(         type, id) __res_p = id.boxminus(__res_p, __oth.id);
+#define MTK_BOXPLUS(          type, id) id.boxplus(MTK::subvector(__vec, &self::id), __scale);
+#define MTK_BOXMINUS(         type, id) id.boxminus(MTK::subvector(__res, &self::id), __oth.id);
 #define MTK_OSTREAM(          type, id) << __var.id << " "
 #define MTK_ISTREAM(          type, id) >> __var.id
 
@@ -120,6 +120,7 @@ BOOST_PP_FOR_1( \
  */
 #define MTK_BUILD_MANIFOLD(name, entries) \
 struct name { \
+	typedef name self; \
 	MTK_SUBVARLIST(entries) \
 	name ( \
 		MTK_TRANSFORM_COMMA(MTK_CONSTRUCTOR_ARG, entries) \
@@ -127,11 +128,9 @@ struct name { \
 		MTK_TRANSFORM_COMMA(MTK_CONSTRUCTOR_COPY, entries) {}\
 	int getDOF() const { return DOF; } \
 	void boxplus(const MTK::vectview<const scalar, DOF> & __vec, scalar __scale = 1 ) { \
-		const scalar *__vec_p = __vec.data(); \
 		MTK_TRANSFORM(MTK_BOXPLUS, entries) \
 	} \
 	void boxminus(MTK::vectview<scalar,DOF> __res, const name& __oth) const { \
-		scalar *__res_p = __res.data(); \
 		MTK_TRANSFORM(MTK_BOXMINUS, entries) \
 	} \
 	friend std::ostream& operator<<(std::ostream& __os, const name& __var){ \

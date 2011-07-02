@@ -39,7 +39,7 @@
 #ifndef VECTVIEW_HPP_
 #define VECTVIEW_HPP_
 
-#include <Eigen/Core>
+#include "eigen.hpp"
 
 namespace MTK {
 
@@ -55,12 +55,13 @@ namespace MTK {
  * @todo @c vectview can be replaced by simple inheritance of @c Eigen::Map, as soon as they get const-correct
  */
 template<class scalar, int dim>
-class vectview : public Eigen::Matrix<scalar, dim, 1>::UnalignedMapType {
+class vectview : public internal::VectviewBase<scalar, dim>::Type {
+	typedef internal::VectviewBase<scalar, dim> VectviewBase;
 public:
 	//! plain matrix type
-	typedef Eigen::Matrix<scalar, dim, 1> matrix_type;
+	typedef typename VectviewBase::matrix_type matrix_type;
 	//! base type
-	typedef typename matrix_type::UnalignedMapType base;
+	typedef typename VectviewBase::Type base;
 	//! construct from pointer
 	vectview(scalar* data) : base(data) {}
 	//! construct from plain matrix
@@ -68,8 +69,15 @@ public:
 	//! construct from another @c vectview
 	vectview(const vectview &v) : base(v) {}
 	//! construct from Eigen::Block:
+#if MTK_EIGEN >= 300
+	template<class Base>
+	vectview(Eigen::VectorBlock<Base, dim> block) : base(&block.coeffRef(0)) {}
+	template<class Base, bool PacketAccess, bool DirectAccessStatus>
+	vectview(Eigen::Block<Base, dim, 1, PacketAccess, DirectAccessStatus> block) : base(&block.coeffRef(0)) {}
+#else
 	template<class Base, int PacketAccess, int DirectAccessStatus>
 	vectview(Eigen::Block<Base, dim, 1, PacketAccess, DirectAccessStatus> block) : base(&block.coeffRef(0)) {}
+#endif
 	//! inherit assignment operator
 	using base::operator=;
 	//! data pointer
@@ -87,12 +95,13 @@ public:
  * @sa vectview
  */
 template<class scalar, int dim>
-class vectview<const scalar, dim> : public Eigen::Matrix<scalar, dim, 1>::UnalignedMapType {
+class vectview<const scalar, dim> : public internal::VectviewBase<scalar, dim>::ConstType {
+	typedef internal::VectviewBase<scalar, dim> VectviewBase;
 public:
 	//! plain matrix type
-	typedef Eigen::Matrix<scalar, dim, 1> matrix_type;
+	typedef typename VectviewBase::matrix_type matrix_type;
 	//! base type
-	typedef typename matrix_type::UnalignedMapType base;
+	typedef typename VectviewBase::ConstType base;
 	//! construct from const pointer
 	vectview(const scalar* data) : base(data) {}
 	//! construct from column vector
@@ -103,21 +112,30 @@ public:
 	vectview(const Eigen::Matrix<scalar, 1, dim, options, phony>& m) : base(m.data()) {}
 	//! construct from another @c vectview
 	vectview(const vectview<scalar, dim> &x) : base(x) {}
+	//! construct from base
+	vectview(const base &x) : base(x) {}
 	/**
 	 * Construct from Block
 	 * @todo adapt this, when Block gets const-correct
 	 */
+#if MTK_EIGEN >= 300
+	template<class Base>
+	vectview(Eigen::VectorBlock<Base, dim> block) : base(&block.coeffRef(0)) {}
+	template<class Base, bool PacketAccess, bool DirectAccessStatus>
+	vectview(Eigen::Block<Base, dim, 1, PacketAccess, DirectAccessStatus> block) : base(&block.coeffRef(0)) {}
+#else
 	template<class Base, int PacketAccess, int DirectAccessStatus>
 	vectview(Eigen::Block<Base, dim, 1, PacketAccess, DirectAccessStatus> block) : base(&block.coeffRef(0)) {}
+#endif
 //	//FIXME construct from temporary expression, this is not save!
 //	template<typename OtherDerived>
 //	vectview(const Eigen::MatrixBase<OtherDerived>& other) : base(other.eval().data()) {
 //		std::cout << __PRETTY_FUNCTION__ << ", data: " << base::data() << std::endl;
 //	}
 	//! constant index operator
-	const scalar operator[](int idx) const {return base::operator[](idx);}
+//	const scalar operator[](int idx) const {return base::operator[](idx);}
 	//! constant index operator
-	const scalar operator()(int idx) const {return base::operator()(idx);}
+//	const scalar operator()(int idx) const {return base::operator()(idx);}
 private:
 	void operator=(const vectview& DONT_USE) const;
 	template<class DONT_USE> void operator= (const DONT_USE&) const;
