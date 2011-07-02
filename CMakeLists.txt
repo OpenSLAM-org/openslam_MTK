@@ -37,8 +37,9 @@ TARGET_LINK_LIBRARIES(slom
 
 IF(SLOM_BUILD_EXAMPLES)
 	ENABLE_TESTING()
-
-# examples are coming soon
-#	ADD_SUBDIRECTORY (example)
+	ADD_EXECUTABLE( min_example doc/example.cpp)
+	TARGET_LINK_LIBRARIES(min_example slom)
+	
+	ADD_SUBDIRECTORY (example)
 	ADD_SUBDIRECTORY (unit_test)
 ENDIF()

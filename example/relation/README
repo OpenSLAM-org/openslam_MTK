@@ -1,0 +1,6 @@
+Relation graph optimizer for 2D and 3D problems.
+Sorry that I can't keep README files for everything up-to-date.
+
+Please run ./relation --help for a list of options.
+
+  When in doubt about usage do not hesitate to ask me!
