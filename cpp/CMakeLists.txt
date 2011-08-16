@@ -1,0 +1,45 @@
+CMAKE_MINIMUM_REQUIRED(VERSION 2.6)
+
+
+IF(NOT CMAKE_BUILD_TYPE)
+  SET(CMAKE_BUILD_TYPE RELEASE CACHE STRING
+      "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel."
+      FORCE)
+ENDIF(NOT CMAKE_BUILD_TYPE)
+
+IF(NOT SLOM_BUILD_LIBONLY)
+	SET(CMAKE_CXX_FLAGS_DEBUG  "-ggdb -O0 -Wall -march=native -msse2 -mfpmath=sse")
+	SET(CMAKE_CXX_FLAGS_RELEASE  "-ggdb -O3 -Wall -Wno-unused-function -march=native -msse2 -mssse3 -mfpmath=sse")
+	SET(SLOM_BUILD_EXAMPLES ON)
+ENDIF(NOT SLOM_BUILD_LIBONLY)
+
+
+# find include dirs:
+
+SET(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake_modules)
+
+FIND_PACKAGE(CXSparse REQUIRED) 
+FIND_PACKAGE(Eigen2)
+FIND_PACKAGE(Boost 1.36.0 REQUIRED COMPONENTS program_options unit_test_framework)
+
+INCLUDE_DIRECTORIES(${CXSPARSE_INCLUDE_DIR} )
+INCLUDE_DIRECTORIES(${EIGEN2_INCLUDE_DIR} )
+INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR} )
+
+INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS})
+
+ADD_LIBRARY( slom STATIC slom/src/Estimator.cpp slom/src/SparseFunction.cpp)
+
+
+TARGET_LINK_LIBRARIES(slom
+	${CXSPARSE_LIBRARY}
+)
+
+IF(SLOM_BUILD_EXAMPLES)
+	ENABLE_TESTING()
+	ADD_EXECUTABLE( min_example doc/example.cpp)
+	TARGET_LINK_LIBRARIES(min_example slom)
+	
+	ADD_SUBDIRECTORY (example)
+	ADD_SUBDIRECTORY (unit_test)
+ENDIF()

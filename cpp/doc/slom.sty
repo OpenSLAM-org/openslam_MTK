@@ -1,0 +1,103 @@
+\usepackage{amssymb}
+
+\usepackage{amsmath}
+\usepackage{xspace}
+
+\newcommand*\R{\ensuremath{\mathbb{R}}} % real numbers
+\newcommand*\C{\ensuremath{\mathbb{C}}} % complex numbers
+\newcommand*\N{\ensuremath{\mathbb{N}}} % natural numbers
+\newcommand*\Z{\ensuremath{\mathbb{Z}}} % integers
+\newcommand*\PP{\ensuremath{\mathbb{P}}} % projective space
+
+\renewcommand*\d{\mathrm{d}}
+\newcommand*\dx{\mathrm{d}x}
+\newcommand*\dy{\mathrm{d}y}
+\newcommand*\dz{\mathrm{d}z}
+\newcommand*\dom{\mathrm{d}\omega}
+\newcommand*\ii{\mathrm{i}}
+\newcommand*\cis[1]{\cos #1 + \ii\sin #1}
+ 
+\DeclareMathOperator\id{id} % id
+\DeclareMathOperator\I{I}   % unity (eye) matrix
+\newcommand*\trans[1][]{^{#1\top}} 
+\newcommand*\inv{^{-1}}
+\newcommand*\scPr[2]{\left< #1, #2\right>}
+\newcommand*\norm[1]{\left\| #1 \right\|} 
+\newcommand*\abs[1]{\left| #1 \right|} 
+\newcommand*\floor[1]{\left\lfloor #1 \right\rfloor}
+\newcommand*\tfloor[1]{\bigl\lfloor #1 \bigr\rfloor}
+\newcommand*\outerProd[1]{#1#1\trans}
+
+\DeclareMathOperator\E{\operatorname{E}} % value of expectation
+\DeclareMathOperator\V{\operatorname{V}} % variance
+\DeclareMathOperator\Cov{\operatorname{Cov}} %covariance
+\DeclareMathOperator\cor{\operatorname{cor}} %correlation
+\let\P\relax
+\DeclareMathOperator\P{\operatorname{P}} % probability
+\DeclareMathOperator\p{\operatorname{p}} % probability density
+\DeclareMathOperator\Nd{\mathcal{N}} % normal distribution
+\newcommand*\Ndp[2]{% normal distribution with parameters
+\Nd\!\left(#1,\,#2\right)
+}
+
+\newcommand\Nde[2]{\expp{-\tfrac12\norm{#1}^2_{#2}}}
+
+\DeclareMathOperator\OO{\operatorname{\mathcal{O}}}
+\newcommand\F{\mathcal{F}}
+
+\newcommand*\e{\mathrm{e}} % Euler's number e
+\newcommand*\expp[1]{\exp\!\left(#1\right)}
+\newcommand*\imp{\Rightarrow} % implication arrow
+\newcommand*\eqv{\Leftrightarrow} % equivalence arrow
+\newcommand*\eps{\varepsilon} % epsilon
+\let\phi\varphi % varphi looks better ;)
+\newcommand*\tX{\tilde X}
+\newcommand*\teps{\tilde\eps}
+
+\DeclareMathOperator\Rot{Rot}
+\DeclareMathOperator\aRot{aRot}
+\DeclareMathOperator\atan{atan}
+\DeclareMathOperator\atantwo{atan2}
+\DeclareMathOperator\sinc{sinc}
+\DeclareMathOperator\sgn{sgn}
+\newcommand\olog{\operatorname{\overline{\log}}}
+\DeclareMathOperator\acos{acos}
+\let\arccos\acos
+
+
+\newcommand{\argmax}{\operatornamewithlimits{argmax}}
+\newcommand{\argmin}{\operatornamewithlimits{argmin}}
+ 
+\newcommand*\setwith[2]{\left\{#1;\; #2\right\}}
+\newcommand*\setminusset[1]{\setminus\left\{#1\right\}}
+
+\newcommand*\matrx[1]{\left[\begin{matrix} #1 \end{matrix}\right]}
+\newcommand*\matrxs[1]{\left[\begin{smallmatrix} #1 \end{smallmatrix}\right]}
+
+\newcommand*\intmp[1]{\int_{\!-#1}^{#1}}
+
+% Manifold plus and minus:
+%% Original version:
+%\newcommand*\mplus{\ensuremath{\boxplus}\xspace}
+%\newcommand*\mmnus{\ensuremath{\boxminus}\xspace}
+%% Lowered by .25ex:
+\DeclareRobustCommand*\mplus{\ensuremath{\mathbin{\text{\raisebox{-.2ex}{$\boxplus$}}}}\xspace}
+\DeclareRobustCommand*\mmnus{\ensuremath{\mathbin{\text{\raisebox{-.2ex}{$\boxminus$}}}}\xspace}
+
+\newcommand*\SO[1]{\ensuremath{SO(#1)}}
+\newcommand*\SE[1]{\ensuremath{SE(#1)}}
+\let\S\relax %% we don't need § signs
+\newcommand*\S{\mathcal{S}}
+\newcommand*\M{\mathcal{M}}
+
+
+\newcommand*\LIMarrow[1]{\xrightarrow{#1}}
+
+
+\newcommand\tquat[2]{\bigl[\!
+\begin{smallmatrix} #1 \\ #2 
+\end{smallmatrix}\!\bigr]}
+
+\newcommand\dquat[2]{\left[
+\begin{matrix} #1 \\ #2 
+\end{matrix}\right]}
