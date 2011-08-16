@@ -1,0 +1,87 @@
+diff --git a/immoptibox/marquardt.m b/immoptibox/marquardt.m
+index b7dd981..bc2de91 100755
+--- a/immoptibox/marquardt.m
++++ b/immoptibox/marquardt.m
+@@ -58,11 +58,16 @@ function  [X, info, perf] = marquardt(fun, x0, opts, varargin)
+ if  nargin < 2,  stop = -1;
+ else
+   [stop x n] = checkx(x0);   
+-  if  ~stop,  [stop f r J] = checkrJ(fun,x0,varargin{:});  k = 1; end
++  if  ~stop
++      [stop f r J] = checkrJ(fun,x0,varargin{:});
++      k = 1;
++  end
+ end
+ if  ~stop
+   g = J'*r;   ng = norm(g,inf);  A = J'*J;
+-  if  isinf(ng) | isinf(norm(A(:),inf)),  stop = -5; end
++  if  isinf(ng) | isinf(norm(A(:),inf))
++      stop = -5;
++  end
+ else
+   f = NaN;  ng = NaN;
+ end
+@@ -71,7 +76,9 @@ if  stop
+   return
+ end
+ 
+-if  nargin < 3,  opts = []; end
++if  nargin < 3
++    opts = [];
++end
+ opts  = checkopts('marquardt', opts);  % use default options where required
+ tau = opts(1);    tolg = opts(2);  tolx = opts(3);  maxeval = opts(4); 
+ 
+@@ -86,14 +93,19 @@ nu = 2;   nh = 0;   stop = 0;  kit = 0;
+ 
+ % Iterate
+ while   ~stop  
+-  if  ng <= tolg,  stop = 1;
++  if  ng <= tolg
++      stop = 1;
+   else
+     [h mu] = geth(A,g,mu); 
+-    nh = norm(h);   nx = tolx + norm(x);
+-    if  nh <= tolx*nx,  stop = 2; end 
++    nh = norm(h);   nx = tolx + norm(mtk.scale(x));
++    if  nh <= tolx*nx
++        stop = 2;
++    end 
+   end 
+   if  ~stop
+-    xnew = x + h;   h = xnew - x;   dL = (h'*(mu*h - g))/2; 
++    xnew = x + h;
++    h = xnew - x;
++    dL = (h'*(mu*h - g))/2; 
+     [stop fn rn Jn] = checkrJ(fun, xnew, varargin{:});  k = k + 1;
+     if  ~stop 
+       if  length(rn) ~= length(r)
+diff --git a/immoptibox/private/checkx.m b/immoptibox/private/checkx.m
+index b4ac2e2..e5fa336 100755
+--- a/immoptibox/private/checkx.m
++++ b/immoptibox/private/checkx.m
+@@ -4,8 +4,8 @@ function  [err, x,n] = checkx(x0)
+ % Version 04.01.25.  hbn@imm.dtu.dk
+ 
+ err = 0;  sx = size(x0);   n = max(sx);
+-if  (min(sx) ~= 1) | ~isreal(x0) | any(isnan(x0(:))) | isinf(norm(x0(:))) 
++if  (min(sx) ~= 1) % | ~isreal(x0) | any(isnan(x0(:))) | isinf(norm(x0(:)))
+   err = -1;   x = []; 
+ else
+-  x = x0(:); 
++  x = x0;
+ end
+\ No newline at end of file
+diff --git a/immoptibox/private/geth.m b/immoptibox/private/geth.m
+index 6f9467e..0731f45 100755
+--- a/immoptibox/private/geth.m
++++ b/immoptibox/private/geth.m
+@@ -13,7 +13,7 @@ n = size(A,1);  chp = 1;
+ while  chp
+   [R chp] = chol(A + mu*eye(n));
+   if  chp == 0  % check for near singularity
+-    chp = rcond(R) < 1e-15;
++    chp = condest(R) < 1e-15;
+   end
+   if  chp,  mu = max(10*mu, eps*mA); end
+ end
