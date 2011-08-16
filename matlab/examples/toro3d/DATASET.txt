@@ -1,0 +1,7 @@
+The synthetic sphere data set is available from openslam.org:
+
+http://openslam.org/toro.html
+
+Or directly in the mednoise variant:
+
+https://openslam.informatik.uni-freiburg.de/data/svn/toro/data/3D/sphere_mednoise.graph

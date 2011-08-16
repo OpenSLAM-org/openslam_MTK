@@ -1,0 +1,11 @@
+The SPA data sets are available from:
+
+http://www.ros.org/research/2010/spa/
+
+or directly using a numbered URL scheme, e.g.
+
+http://www.ros.org/research/2010/spa/data/graph_050.txt.gz
+
+Please unpack them before running the example code, e.g.
+
+$ gunzip graph_050.txt.gz

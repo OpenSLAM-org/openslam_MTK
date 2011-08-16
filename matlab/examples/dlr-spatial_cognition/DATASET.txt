@@ -1,0 +1,7 @@
+The DLR Spatial Cognition data set is avaiable from:
+
+http://www.informatik.uni-bremen.de/agebv/en/DlrSpatialCognitionDataSet
+
+or directly from:
+
+http://www.informatik.uni-bremen.de/agebv/en/DlrSpatialCognitionDataSet?action=AttachFile&do=get&target=DLR-Spatial_Cognition_noimages.tar.gz

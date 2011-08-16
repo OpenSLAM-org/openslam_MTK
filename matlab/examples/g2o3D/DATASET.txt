@@ -1,0 +1,7 @@
+The parking garage data set can be downloaded from openslam.org:
+
+http://openslam.org/g2o.html
+
+or directly from:
+
+https://openslam.informatik.uni-freiburg.de/data/svn/g2o/trunk/data/3d/garage/parking-garage.g2o
