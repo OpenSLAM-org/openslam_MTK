@@ -83,7 +83,9 @@ BOOST_PP_FOR_1( \
 		BOOST_PP_IF(BOOST_PP_DEC(s), MTK_PUT_TYPE, MTK_PUT_TYPE_AND_ENUM), \
 		( BOOST_PP_TUPLE_REM_2 head, dof)) 
 
-#define MTK_ENTRIES_TEST(r, state) BOOST_PP_TUPLE_ELEM_4_0 state
+#define MTK_ENTRIES_TEST(r, state) MTK_TUPLE_ELEM_4_0 state
+//! this used to be BOOST_PP_TUPLE_ELEM_4_0:
+#define MTK_TUPLE_ELEM_4_0(a,b,c,d) a 
 
 #define MTK_ENTRIES_NEXT(r, state) MTK_ENTRIES_NEXT_I state
 #define MTK_ENTRIES_NEXT_I(len, head, seq, dof) ( \
