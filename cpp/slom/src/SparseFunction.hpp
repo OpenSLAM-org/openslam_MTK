@@ -41,16 +41,25 @@
 #define SPARSEFUNCTION_HH_
 
 #include "internal.hpp"
+#include "RVHolder.hpp"
+#include "MeasurementHolder.hpp"
 #include <Eigen/Core>
 
-#include <cs.h>
+#include "Sparse.hpp"
 
 #include <deque>
 #include <iostream>
 #include <numeric>
 
+#include <bitset>
+
 
 namespace SLOM {
+
+class CallBack;
+class Solver;
+class Algorithm;
+class Preconditioner;
 
 
 /**
@@ -70,17 +79,30 @@ public:
 	VarID(const base &m) : base(m) {}
 	VarID() : base(0) {}
 	
-	//! checks, if this is a valid ID.
-	operator bool() const
-	{
-		return base::ptr != 0;
+	bool operator!() const {
+		return base::ptr == 0;
+	}
+	
+	// deprecated, because it causes trouble with automatically promoting to bool->int->double
+	// use !! if required
+	MTK_DEPRECATED
+	operator bool() const {
+		return !(!*this);
+	}
+	
+	using base::index;
+	bool operator==(const VarID<M>& y) const {
+		return base::ptr == y.ptr;
+	}
+	bool operator!=(const VarID<M>& y) const {
+		return base::ptr != y.ptr;
 	}
 	
 	bool getsOptimized() const {
 		return base::ptr && base::ptr->optimize;
 	}
 	template<class M2>
-	bool operator<(const VarID<M2>& v) const { return base::ptr < v.ptr; }
+	bool operator<(const VarID<M2>& v) const { return base::index() < v.index(); }
 	
 	const M& operator*()  const { return  base::ptr->backup;}
 	const M* operator->() const { return &base::ptr->backup;}
@@ -90,7 +112,7 @@ public:
 template<class Measurement>
 class MeasID : private internal::MeasurementList::id<Measurement> {
 	typedef internal::MeasurementList::id<Measurement> base;
-	MeasID(internal::IMeasurement_Holder::holder<Measurement> &m) : base(&m) {}
+	MeasID(internal::Measurement_Holder<Measurement> &m) : base(&m) {}
 	MeasID(const internal::MeasurementList::id<Measurement> &id) : base(id) {}
 	friend class SparseFunction;
 public:
@@ -103,19 +125,50 @@ public:
 	{
 		return &**this;
 	}
+	
+	const internal::Measurement_Holder<Measurement>& getHolder() const {
+		return *base::ptr;
+	}
+	
+	// This allows to change data members of a measurement
+	template<class Data>
+	Data& operator->*(Data Measurement::* data) {
+		return (base::ptr->m_).*data;
+	}
+	
+private:
+	template<class Var, int idx>
+	void operator->*(internal::IMeasurement_Holder::VarRef<Var, idx> Measurement::* var) const {
+		assert(false && "changing variables not yet supported! Remove measurement and add it again");
+		(void) var;
+		// TODO return some proxy, which allows changing VarRefs
+	}
+	
 };
 
 
 class SparseFunction {
 	
 	friend class Estimator;
+	friend class Solver;
+	friend class SparseInterface;
+	friend class Algorithm;
 	
+	CallBack *callback;
+	// FIXME solver and algo and precond could be replaced by a list of SparseInterface pointers
+	Solver * solver;
+	Algorithm * algo;
+	Preconditioner * precond;
+
 	typedef internal::RVList RVList;
 	typedef internal::IRVHolder IRVHolder;
 	
 	typedef internal::MeasurementList MeasurementList;
 	typedef internal::IMeasurement_Holder IMeasurement_Holder;
 	
+	// TODO Eventually this shall get replaced by some kind of block-matrix
+	typedef Eigen::SparseMatrix<double> SparseType;
+	typedef Eigen::VectorXd             VectorType;
 	
 	//! \name Storage of variables and measurements
 	//@{
@@ -127,8 +180,37 @@ class SparseFunction {
 	
 	//! \name Internal helper variables
 	//@{
-	//! keep track whether the structure or values have changed
-	bool _structureChanged, _addDiagonal, _valuesChanged;
+	//! List of entities which might or might not be up to date:
+	enum entities {
+		ent_residuum, ent_newRes, ent_gradient,
+		ent_J, ent_Jt, 
+		ent_JtJ, 
+		ent_BlockJ, ent_BlockJtJ, 
+		
+		ent_jacobiPreconditioner /* might get obsolete */, 
+		
+		ent_numberOfEntities
+	};
+	//! keep track whether certain structure and/or value entities are up to date
+	std::bitset<ent_numberOfEntities> structureUpToDate, valuesUpToDate;
+	
+	
+	bool backup_valid;
+	
+	void updated(entities ent) {
+		structureUpToDate[ent] = valuesUpToDate[ent] = true;
+	}
+	
+	/**
+	 * This method is to be called whenever any value changed.
+	 */
+	void valuesChanged();
+	
+	/**
+	 * This method is to be called whenever the structure changes.
+	 * This requires re-computation of, e.g., symbolical decompositions
+	 */
+	void structureChanged();
 	
 	//! delta for numerical calculation of Jacobian
 	double numerical_delta, half_delta_inv;
@@ -136,14 +218,31 @@ class SparseFunction {
 	//! Number of non-zeroes in the jacobian
 	int nnz;
 	//! sparse Jacobian of the function
-	cs* jacobian;
+	SparseType jacobian;
 	
 	// diagonal of $J^\top J$
-	Eigen::VectorXd cholCovariance;
+	VectorType cholCovariance;
+	
+	
+	//! current residuum (at backup position)
+	VectorType residuum;
+	double RSS;
+	
+	//! residuum at working position:
+	VectorType newResiduum;
+	double newRSS;
+	
+	//! current gradient;
+	VectorType gradient;
+	double norm2_gradient;
+	
 	
 	// helper variables
-	cs* Jt; // transpose of jacobian
-	cs* JtJ;  // Jt * J
+	//! over-approximation of non-zeroes in JtJ
+	int nnz_JtJ;
+	// FIXME Jt might not be needed anymore
+	SparseType Jt; // transpose of jacobian
+	SparseType JtJ;  // Jt * J
 	//@}
 	
 	//! \name Construction and destruction
@@ -152,28 +251,38 @@ class SparseFunction {
 	 * Construct a SparseFunction object
 	 * @param delta delta for numerical differentiation
 	 */
-	SparseFunction(double delta = 1e-6) 
-	: _structureChanged(true),
-	  numerical_delta(delta), half_delta_inv(0.5/delta),
-	  nnz(0),
-	  jacobian(0), Jt(0), JtJ(0) 
+	explicit
+	SparseFunction(double delta = 1e-6) : 
+		callback(0),
+		solver(0),
+		algo(0),
+		precond(0),
+		numerical_delta(delta), half_delta_inv(0.5/delta),
+		nnz(0), nnz_JtJ(0)//,
+//	  jacobian(0), Jt(0), JtJ(0) 
 	{
+		structureChanged();
 		assert(delta > 0 && "delta must be positive");
+		backup_valid = true; // true because there are no entries
 	}
 	
-	void freeWorkspace() {
-		jacobian = cs_di_spfree(jacobian);
-		freeTemporaries();
-	}
 	
-	void freeTemporaries() {
-		Jt =  cs_di_spfree(Jt);
-		JtJ =  cs_di_spfree(JtJ);
-	}
 	~SparseFunction() {
-		freeWorkspace();
+	}
+	
+	
+	void cleanWorkspace() {
+		// mark all structure relevant things as invalid:
+		structureChanged();
+		
+		newResiduum = residuum = gradient = cholCovariance = VectorType();
+		jacobian = Jt = JtJ = SparseType();
 	}
 	//@}
+	
+	CallBack* getCallback() const {
+		return callback;
+	}
 	
 	/**
 	 * \name Variable Managment
@@ -185,17 +294,21 @@ class SparseFunction {
 	template<class Manifold>
 	VarID<Manifold> insertRV(const Manifold& m, bool optimize = true){
 		RVList &list = optimize ? variables : fixed_variables; 
-		IRVHolder::holder<Manifold>* ptr = new IRVHolder::holder<Manifold>(m, optimize);
+		internal::RVHolder<Manifold>* ptr = new internal::RVHolder<Manifold>(m, optimize);
 		VarID<Manifold> id = list.insert(ptr);
 		ptr->isRegistered = true;
-		_structureChanged |= optimize;
+		if(optimize) {
+			structureChanged();
+			// JtJ (if calculated) gets a new diagonal block:
+			nnz_JtJ += Manifold::DOF * (Manifold::DOF + 1) / 2; 
+		}
 		return id;
 	}
 	
 	template<class Manifold>
 	VarID<Manifold> reinitRV(VarID<Manifold> id, const Manifold& m) {
+		valuesChanged();
 		id.ptr->reset(m);
-		_valuesChanged = true;
 		return id;
 	}
 	
@@ -212,40 +325,52 @@ class SparseFunction {
 		id.ptr->optimize = optimize;
 		
 		old_list.unhook(id);
+		
+		structureChanged();
 		return new_list.insert(id.ptr);
 		
 	}
 	
 	template<class Manifold>
 	bool removeRV(const VarID<Manifold> &id){
-		VarID<Manifold> id_(id);
-		if(id_.ptr->has_measurements()) {
-			std::cerr << "Tried to remove a variable still in use!" << std::endl;
+		if(id.ptr->has_measurements()) {
 			return false;
 		}
-		bool optimize = id_.ptr->optimize;
-		RVList &list = optimize ? variables : fixed_variables;
-		//isInitialized &= !optimize; // if variable had to be optimized, re-initialization is necessary
-		_structureChanged |= optimize;
+		// move variable to fixed_variables (if not done already) this also updates nnz counts
+		VarID<Manifold> id_ = optimizeRV(id, false);
 		
-		list.remove(id_);
+		fixed_variables.remove(id_);
 		return true;
 	}
 	
-	template<class Measurement>
-	MeasID<Measurement> insertMeasurement(const Measurement &m) {
-		MeasID<Measurement> id = measurements.insert(new IMeasurement_Holder::holder<Measurement>(m));
+	
+	template<class Measurement, class DevType>
+	MeasID<Measurement> insertMeasurement(const Measurement &m, const internal::InvDeviation<DevType>& dev) {
+		MeasID<Measurement> id = measurements.insert(new internal::Measurement_Holder_with_Dev<Measurement, DevType>(m, dev));
 		nnz += id.ptr->registerVariables();
-		//isInitialized = false;
-		_structureChanged = true;
+		
+		// over-approximation for nnz in JtJ, TODO if it really matters, calculate correct number when defining Measurements
+		nnz_JtJ += (Measurement::DEPEND - 1) * Measurement::DEPEND / 2;
+		
+		structureChanged();
 		
 		return id;
 	}
+
 	
+	
+	/**
+	 * @warning NOT PROPERLY TESTED
+	 * @param id
+	 * @return
+	 */
 	template<class Measurement>
-	bool removeMeasurement(const MeasID<Measurement> &id){
+	bool removeMeasurement(MeasID<Measurement> id){
 		nnz -= id.ptr->unregisterVariables();
-		_structureChanged = true;
+		nnz_JtJ -= (Measurement::DEPEND - 1) * Measurement::DEPEND / 2;
+		measurements.remove(id);
+		
+		structureChanged();
 		
 		return true;
 	}
@@ -256,10 +381,13 @@ class SparseFunction {
 	//! \name Methods needed for optimization algorithms
 	//@{
 	/**
-	 * Creates "the big matrix", 
+	 * Creates "the big matrix",
+	 * 
+	 * @deprecated this shall be replace by block matrix entirely 
 	 */
 	void createSparse();
-	void updateDiagonal(double lamda, double* cholCovariance);
+	
+	//! @deprecated mark as __attribute__((deprecated))
 	void initCovariance();
 	
 	/**
@@ -268,47 +396,126 @@ class SparseFunction {
 	 */
 	void calculateJacobian();
 	
-	double evaluate(double *result) const;
+	void calculateBlockJacobian();
+	
+	/**
+	 * Evaluate the function, store result to vector starting at result and return the RSS.
+	 */
+	double evaluate(VectorType & result) const;
 	
 	
 	/**
 	 * get the current Jacobian. If neither values nor structure has changed since last call,
 	 * no recalculation is done.
 	 * If add_diagonal = true, each column contains an extra entry for diagonals
+	 * @deprecated This MIGHT get deprecated in a very future version
 	 */ 
-	const cs* getJ(){
-		initialize(_addDiagonal);
-		if(_valuesChanged){
-			calculateJacobian();
-			freeTemporaries(); // remove Jt and JtJ if values changed
-			_valuesChanged = false;
-		}
+	const SparseType& getJ(){
+		calculateJacobian();
+		
 		return jacobian;
 	}
 	
-	const cs* getJt(){
-		if(!Jt){
-			const cs* J = getJ();
-			Jt = cs_transpose(J, true);
-		}
+	//! returns the residuum at the back-up position
+	const VectorType& getResiduum() {
+		computeResiduum();
+		return residuum;
+	}
+	//! gets the residual sum of squares (i.e. squared norm of residuum)
+	double getRSS(){
+		computeResiduum();
+		return RSS;
+	}
+	
+	//! gets the RSS at working position
+	double getNewRSS() {
+		computeNewRes();
+		return newRSS;
+	}
+	
+	void computeNewRes() {
+		if(valuesUpToDate[ent_newRes]) return;
+		newResiduum.resize(getM());
+		newRSS = evaluate(newResiduum);
+		updated(ent_newRes);
+	}
+	
+	void computeResiduum() {
+		if(valuesUpToDate[ent_residuum]) return;
+		assert(backup_valid && "Can't compute RSS with invalid working copy");
+		residuum.resize(getM());
+		RSS = evaluate(residuum);
+		updated(ent_residuum);
+	}
+	
+	const VectorType& getGradient(){
+		computeGradient();
+		return gradient;
+	}
+	double getSquaredNormOfGradient(){
+		computeGradient();
+		return norm2_gradient;
+	}
+	
+	void computeGradient() {
+		if(valuesUpToDate[ent_gradient]) return;
+		gradient.setZero(getN());
+		add_Jtu(gradient, getResiduum());
+		norm2_gradient = gradient.squaredNorm();
+		updated(ent_gradient);
+	}
+	
+	void updateJacobiPreconditioner();
+	
+	void applyJacobiPreconditioner(VectorType &vec, bool transpose);
+	
+	void updateBlockJtJ();
+	
+	void applyCholIncPreconditioner(VectorType &vec, bool transpose);
+	
+	void applyPreconditioner(VectorType &vec, bool transpose);
+	
+	//! @deprecated This feature might be removed
+	const VectorType& getCholCov() {
+		// make sure cholCovariance is up-to-date:
+		getJ();
+		return cholCovariance;
+	}
+	/**
+	 * @todo hopefully, this function will not be necessary
+	 * @deprecated This function might be removed in future versions.
+	 */
+	//MTK_DEPRECATED
+	const SparseType& getJt() {
+		if(!valuesUpToDate[ent_Jt]) 
+			Jt = getJ().transpose();
 		return Jt;
 	}
 	
 	/**
 	 * res += J * v
 	 */
-	void add_Jv(double *res, const double* v){
-		cs_gaxpy(getJ(), v, res);
+	void add_Jv(VectorType& res, const VectorType& v){
+		res += getJ() * v;
 	}
 	/**
 	 * res += J' * u
 	 */
-	void add_Jtu(double *res, const double* u){
-		cs_gaxpy(getJt(), u, res);
+	void add_Jtu(VectorType& res, const VectorType& u_){
+		assert(u_.rows() == getM() && res.rows() == getN() && "Vector dimensions must agree with Jacobian");
+#ifdef SLOM_EXPERIMENTAL
+		getJt();
+		for(MeasurementList::iterator it= measurements.begin(); it != measurements.end(); ++it){
+			u = it->addJtu(res, u);
+		}
+#else /* SLOM_EXPERIMENTAL */
+		res += getJ().transpose() * u_;
+//		cs_gaxpy(getJt(), u, res);
+#endif /* SLOM_EXPERIMENTAL */
 	}
 	
 	//! returns upper half of JtJ. First entry per column corresponds to diagonal entry
-	const cs* get_JtJ();
+	const SparseType& get_JtJ();
 	
 	std::pair<int,int> getSize() const {
 		int M = measurements.getDim();
@@ -318,28 +525,30 @@ class SparseFunction {
 		return std::make_pair(M, N);
 	}
 	
-	bool initialize(bool addDiagonal) {
-		bool ret = _structureChanged;
-		_addDiagonal = addDiagonal;
-		_structureChanged = false;
-		if(ret) {
-			freeWorkspace();
-			createSparse();
-			initCovariance();
-			_valuesChanged = true;
-		}
-		return ret;
-	}
+	/**
+	 * Applies the delta vector (multiplied by scale) to the backup and stores it to the working copy
+	 * @param delta
+	 * @param scale
+	 * @return  Residual sum of squares at the new working position
+	 */
+	double apply_delta(const VectorType &delta, double scale);
 	
-	void apply_delta(const Eigen::VectorXd &delta, double scale);
 	
+	/**
+	 * If store is true, it stores the working copy to backup, otherwise
+	 * copies the backup to the working copy.
+	 * @param store
+	 */
 	void store_or_restore(bool store){
 		if(store){
 			for(RVList::iterator v = variables.begin(); v!= variables.end(); ++v){
 				v->store();
 			}
-			_valuesChanged = true;
-			freeTemporaries();
+			RSS = getNewRSS();
+			assert(valuesUpToDate[ent_newRes] && "new residuum was not evaluated before storing");
+			valuesChanged();
+			residuum.swap(newResiduum);
+			updated(ent_residuum);
 		}
 		else
 		{
@@ -347,8 +556,10 @@ class SparseFunction {
 				v->restore();
 			}
 		}
+		backup_valid = true;
 	}
 	//@}
+	
 	
 public:
 	//! \name Inspection functions
@@ -393,7 +604,7 @@ public:
 		for(MeasurementList::const_iterator it = measurements.begin(); it != measurements.end(); ++it)
 		{
 			const IMeasurement_Holder &mh = *it;
-			typedef typename IMeasurement_Holder::holder<Measurement> m_type;
+			typedef internal::Measurement_Holder<Measurement> m_type;
 			const m_type *m = dynamic_cast<const m_type*>(&mh);
 			if(m!=0)
 			{
@@ -406,21 +617,26 @@ public:
 		return sum_dim;
 	}
 	
+	template<class Measurement>
+	MTK::vectview<const double, Measurement::DIM>
+	getRes(const SLOM::MeasID<Measurement>& id) {
+		return MTK::vectview<const double, Measurement::DIM>(getResiduum().data() + id.index(), id->dim);
+	}
+	
 	/// gets the RSS of all Measurements depending on variable with given ID.
 	template<class Manifold>
-	static int get_RSS(double &rss, const VarID<Manifold> &id) {
+	int get_RSS(double &rss, const VarID<Manifold> &id) const {
 		const internal::IRVHolder::measurement_container& meas = id.ptr->measurements;
 		
-		rss = 0;
-		int sum_dim = 0;
-		for(internal::IRVHolder::measurement_container::const_iterator m = meas.begin(); m!= meas.end(); ++m){
-			int dim = (*m)->getDim();
-			sum_dim += dim;
-			double res[dim];
-			(*m)->eval(res, false);
-			rss = std::inner_product(res, res + dim, res, rss);
+		// allocate temporary vector for evaluation:
+		VectorType res_tmp(getM());
+		double* res = res_tmp.data();
+		for(internal::IRVHolder::measurement_container::const_iterator m = meas.begin(); m!= meas.end(); ++m) {
+			res = (*m)->eval(res, false);
 		}
-		return sum_dim;
+		int dim = res - res_tmp.data();
+		rss = res_tmp.head(dim).squaredNorm();
+		return dim;
 	}
 	
 	/// returns the index of given variable

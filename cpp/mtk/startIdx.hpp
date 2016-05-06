@@ -118,34 +118,58 @@ subblock(Eigen::Matrix<typename Base::scalar, Base::DOF, Base::DOF> &cov,
 	return cov.template block<T::DOF, T::DOF>(idx, idx);
 }
 
+
+template<class Base, class T, int idx>
+vectview<typename Base::scalar, T::DOF>
+subvector_impl(vectview<typename Base::scalar, Base::DOF> vec, SubManifold<T, idx> Base::*)
+{
+	return vec.template segment<T::DOF>(idx);
+}
+
+
 /**
  * Get the subvector corresponding to a sub-manifold from a bigger vector.
  */
-template<class Base, class T, int idx>
-vectview<typename Base::scalar, T::DOF>
-subvector(vectview<typename Base::scalar, Base::DOF> vec, SubManifold<T, idx> Base::*)
+template<class Scalar, int BaseDOF, class Base, class T, int idx>
+vectview<Scalar, T::DOF>
+subvector(vectview<Scalar, BaseDOF> vec, SubManifold<T, idx> Base::* ptr)
 {
-	return &vec.coeffRef(idx);
+	return subvector_impl(vec, ptr);
 }
 
 /**
  * @todo This should be covered already by subvector(vectview<typename Base::scalar,Base::DOF> vec,SubManifold<T,idx> Base::*)
  */
-template<class Base, class T, int idx>
-vectview<typename Base::scalar, T::DOF>
-subvector(Eigen::Matrix<typename Base::scalar, Base::DOF, 1>& vec, SubManifold<T, idx> Base::*)
+template<class Scalar, int BaseDOF, class Base, class T, int idx>
+vectview<Scalar, T::DOF>
+subvector(Eigen::Matrix<Scalar, BaseDOF, 1>& vec, SubManifold<T, idx> Base::* ptr)
 {
-	return &vec.coeffRef(idx);
+	return subvector_impl(vectview<Scalar, BaseDOF>(vec), ptr);
 }
+
+template<class Scalar, int BaseDOF, class Base, class T, int idx>
+vectview<const Scalar, T::DOF>
+subvector(const Eigen::Matrix<Scalar, BaseDOF, 1>& vec, SubManifold<T, idx> Base::* ptr)
+{
+	return subvector_impl(vectview<const Scalar, BaseDOF>(vec), ptr);
+}
+
 
 /**
  * const version of subvector(vectview<typename Base::scalar,Base::DOF> vec,SubManifold<T,idx> Base::*)
  */
 template<class Base, class T, int idx>
 vectview<const typename Base::scalar, T::DOF>
-subvector(const vectview<const typename Base::scalar, Base::DOF> cvec, SubManifold<T, idx> Base::*)
+subvector_impl(const vectview<const typename Base::scalar, Base::DOF> cvec, SubManifold<T, idx> Base::*)
 {
 	return cvec.template segment<T::DOF>(idx);
+}
+
+template<class Scalar, int BaseDOF, class Base, class T, int idx>
+vectview<const Scalar, T::DOF>
+subvector(const vectview<const Scalar, BaseDOF> cvec, SubManifold<T, idx> Base::* ptr)
+{
+	return subvector_impl(cvec, ptr);
 }
 
 //@}

@@ -40,16 +40,16 @@
 #ifndef __SLOM_UTIL_M_ESTIMATE_HPP__
 #define __SLOM_UTIL_M_ESTIMATE_HPP__
 
-#include <math.h>
-#include <Eigen/Core>
+#include <cmath>
+#include "../mtk/src/vectview.hpp"
 
 namespace SLOM {
 	
 // FIXME re-check whether this is correct!
-template<class T>
+template<int dof, class T>
 static
-void m_estimate(double *result, const Eigen::MatrixBase<T> &vec, const double &bound){
-	typename Eigen::MatrixBase<T>::PlainMatrixType::UnalignedMapType res(result);
+void m_estimate(MTK::vectview<double, dof> res, const Eigen::MatrixBase<T> &vec, const double &bound){
+//	typename Eigen::MatrixBase<T>::PlainMatrixType::UnalignedMapType res(result);
 	res = vec;
 	double norm2 = res.squaredNorm();
 	if(norm2>bound){

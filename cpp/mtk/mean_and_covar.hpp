@@ -51,7 +51,7 @@ namespace MTK {
 
 
 /**
- * Estimate mean value and covariance of a set of manifolds.
+ * Estimate mean value and covariance of a set of manifold values.
  * 
  * @tparam M    Manifold type. Must implement boxminus, boxplus and have 
  *              @c typedef scalar and @c enum DOF.

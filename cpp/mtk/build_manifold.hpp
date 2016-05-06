@@ -44,6 +44,7 @@
 #include <boost/preprocessor/cat.hpp>
 
 #include "src/SubManifold.hpp"
+#include "startIdx.hpp"
 
 #ifndef PARSED_BY_DOXYGEN
 //////// internals //////
@@ -84,15 +85,16 @@ BOOST_PP_FOR_1( \
 		( BOOST_PP_TUPLE_REM_2 head, dof)) 
 
 #define MTK_ENTRIES_TEST(r, state) MTK_TUPLE_ELEM_4_0 state
+
 //! this used to be BOOST_PP_TUPLE_ELEM_4_0:
-#define MTK_TUPLE_ELEM_4_0(a,b,c,d) a 
+#define MTK_TUPLE_ELEM_4_0(a,b,c,d) a
 
 #define MTK_ENTRIES_NEXT(r, state) MTK_ENTRIES_NEXT_I state
 #define MTK_ENTRIES_NEXT_I(len, head, seq, dof) ( \
 		BOOST_PP_DEC(len), \
 		BOOST_PP_SEQ_HEAD(seq), \
 		BOOST_PP_SEQ_TAIL(seq), \
-		BOOST_PP_TUPLE_ELEM_2_0 head::DOF + dof)
+		dof + BOOST_PP_TUPLE_ELEM_2_0 head::DOF)
 
 #endif /* not PARSED_BY_DOXYGEN */
 

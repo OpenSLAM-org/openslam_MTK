@@ -42,6 +42,7 @@
 #include <mtk/types/pose.hpp>
 #include <mtk/types/SOn.hpp>
 #include <slom/CallBack.hpp>
+#include <slom/Optimizer.hpp>
 
 #include "SO3singular.hpp"
 #include "relation_parser.hpp"
@@ -73,7 +74,7 @@ SLOM_IMPLEMENT_MEASUREMENT(UnitQuat, ret){
 template<>
 void RelationParser<Pose3Dquat4, Pose3Dexp>::insertPose(int id, const Pose3Dquat4& p) {
 	poses[id] = e.insertRV(p);
-	if(e.getLamda() <=0 ) // add unit-lenght measurement for Gauss-Newton mode
+	if(optim.getLambda() <=0 ) // add unit-length measurement for Gauss-Newton mode
 		e.insertMeasurement(UnitQuat(poses[id]));
 }
 
@@ -157,7 +158,7 @@ struct RPHolder : public IRPHolder<MeasurementType> {
 	
 	RP rp;
 	
-	RPHolder(SLOM::Estimator &e, int seed) : rp(e, true, seed) {}
+	RPHolder(SLOM::Optimizer &optim, int seed) : rp(optim, true, seed) {}
 	
 	void parse(std::istream &logfile, bool init,
 			ParsePose pPose, ParseCov pCov, int covariance, double noise=-1.0) {
@@ -187,11 +188,14 @@ struct RPHolder : public IRPHolder<MeasurementType> {
 
 int main(int argc, char* argv[])
 {
+	
+	SLOM::OptimizerOptions optiOpts;
+	
 	int dim;
 	char input_angles;
 	bool toro;
 	
-	int max_steps;
+//	int max_steps;
 	int covariance;
 	bool init;
 	std::string output;
@@ -201,13 +205,14 @@ int main(int argc, char* argv[])
 	char orientation_type;
 	
 	std::string measurements, dump_jacobian, statsfile;
-	int verbosity;
-	double lambda;
+//	int verbosity;
+//	double lambda;
 	po::options_description desc("Options");
+	desc.add(optiOpts);
 	desc.add_options()
 		("help,h", "print this help message")
-		("lambda,l", po::value(&lambda)->default_value(0), "initial lambda for Levenberg-Marquard optimization, if <= 0 Gauss-Newton is performed")
-		("steps,s", po::value(&max_steps)->default_value(10), "maximal number of optimization steps, for negative values run exactly abs(steps)")
+//		("lambda,l", po::value(&lambda)->default_value(0), "initial lambda for Levenberg-Marquard optimization, if <= 0 Gauss-Newton is performed")
+//		("steps,s", po::value(&max_steps)->default_value(10), "maximal number of optimization steps, for negative values run exactly abs(steps)")
 		("dim,d", po::value(&dim)->default_value(3), "2D or 3D problem")
 		("cov,C", po::value(&covariance)->default_value(0)->implicit_value(-1), 
 				"Covariance information is given as Covariance (>0) or Information (<0) and is already (+/-2) or needs to be (+/-1) decomposed")
@@ -216,9 +221,9 @@ int main(int argc, char* argv[])
 		("init,I",  po::value(&init)->default_value(false)->implicit_value(true), "Use init values from logfile if present")
 		("measurements,m",po::value(&measurements))
 		("output,o",      po::value(&output)->implicit_value("output"), "output filename, will be extended by 3-digits and type extensions")
-		("stats,S", po::value(&statsfile)->implicit_value("stats.dat"), "output statistics to this file")
+		("stats,O", po::value(&statsfile)->implicit_value("stats.dat"), "output statistics to this file")
 		("dump-jacobian,J", po::value(&dump_jacobian)->implicit_value("jacobian.dat"), "file name to dump last jacobian")
-		("verbosity,v", po::value(&verbosity)->default_value(2), "Verbosity of optimizer, 0=off")
+//		("verbosity,v", po::value(&verbosity)->default_value(2), "Verbosity of optimizer, 0=off")
 		("noise,N", po::value(&noise)->default_value(-1.0), 
 				"add artificial noise to measurements (non-positive values are ignored, just works with -C 0, i.e. only N parameter is used")
 		("seed", po::value(&seed)->default_value(5489), "seed for random generator")
@@ -245,9 +250,11 @@ int main(int argc, char* argv[])
 		return -1;
 	}
 	
-	SLOM::Estimator e(lambda <= 0 ? SLOM::Estimator::GaussNewton : SLOM::Estimator::Levenberg, lambda);
-	SLOM::CallBack cb(e, verbosity, std::cerr);
-	e.setCallBack(cb);
+	SLOM::Optimizer optim(optiOpts, std::cerr);
+	
+	int max_steps = optiOpts.optimization_steps;
+	
+	SLOM::Estimator &e = optim.getEstimator();
 	
 	if(noise > 0) {
 		if(covariance != 0) {
@@ -280,10 +287,10 @@ int main(int argc, char* argv[])
 		boost::scoped_ptr<IRPHolder3D> rp;
 		
 		switch(std::toupper(orientation_type)){
-		case 'M': rp.reset(new RPHolder<Pose3Dexp   , Pose3Dexp>(e, seed)); break;
-		case 'E': rp.reset(new RPHolder<Pose3Deuler , Pose3Dexp>(e, seed)); break;
-		case 'S': rp.reset(new RPHolder<Pose3Dscaled, Pose3Dexp>(e, seed)); break;
-		case 'Q': rp.reset(new RPHolder<Pose3Dquat4 , Pose3Dexp>(e, seed)); break;
+		case 'M': rp.reset(new RPHolder<Pose3Dexp   , Pose3Dexp>(optim, seed)); break;
+		case 'E': rp.reset(new RPHolder<Pose3Deuler , Pose3Dexp>(optim, seed)); break;
+		case 'S': rp.reset(new RPHolder<Pose3Dscaled, Pose3Dexp>(optim, seed)); break;
+		case 'Q': rp.reset(new RPHolder<Pose3Dquat4 , Pose3Dexp>(optim, seed)); break;
 		default:
 			std::cerr << "Invalid internal oriention chosen. Valid are: M,E,S,Q\n";
 			return -1;
@@ -298,7 +305,7 @@ int main(int argc, char* argv[])
 		}
 	} else if(dim == 2) {
 		typedef RPHolder<Pose2D> RP;
-		RP rp(e, seed);
+		RP rp(optim, seed);
 		RP::ParseCov  pCov = 0;
 		if(std::abs(covariance) == 1){
 			pCov = parseCov<SLOM::CholeskyMode::CHOLESKY_FULL,3>;
@@ -330,6 +337,8 @@ int main(int argc, char* argv[])
 		std::ofstream out(dump_jacobian.c_str());
 		e.dumpJacobian(out);
 	}
+	
+	std::cout << "\nFinished\n";
 
 	return 0;
 }

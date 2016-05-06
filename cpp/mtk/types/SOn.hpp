@@ -52,13 +52,13 @@ namespace MTK {
  * There is no guarantee that the representing scalar is within any interval,
  * but the result of boxminus will always have magnitude @f$\le\pi @f$.
  */
-template<class _scalar = double>
+template<class _scalar = double, int Options = Eigen::AutoAlign>
 struct SO2 : public Eigen::Rotation2D<_scalar> {
 	enum {DOF = 1, DIM = 2};
 	
 	typedef _scalar scalar;
 	typedef Eigen::Rotation2D<scalar> base;
-	typedef vect<DIM, scalar> vect_type;
+	typedef vect<DIM, scalar, Options> vect_type;
 	
 	//using base::operator=;
 	
@@ -118,17 +118,19 @@ struct SO2 : public Eigen::Rotation2D<_scalar> {
  * It is assumed that the internal Quaternion always stays normalized,
  * should this not be the case, call inherited member function @c normalize().
  */
-template<class _scalar = double>
-struct SO3 : public Eigen::Quaternion<_scalar> {
+template<class _scalar = double, int Options = Eigen::AutoAlign>
+struct SO3 : public Eigen::Quaternion<_scalar, Options> {
 	enum {DOF = 3, DIM = 3};
 	typedef _scalar scalar;
-	typedef Eigen::Quaternion<scalar> base;
-	typedef vect<DIM, scalar> vect_type;
+	typedef Eigen::Quaternion<scalar, Options> base;
+	typedef Eigen::Quaternion<scalar> Quaternion;
+	typedef vect<DIM, scalar, Options> vect_type;
 	
 	//using base::operator=;
 	
 	//! Calculate @c this->inverse() * @c r
-	SO3 operator%(const base &r) const {
+	template<class OtherDerived> EIGEN_STRONG_INLINE 
+	Quaternion operator%(const Eigen::QuaternionBase<OtherDerived> &r) const {
 		return base::conjugate() * r;
 	}
 	
@@ -139,7 +141,8 @@ struct SO3 : public Eigen::Quaternion<_scalar> {
 	}
 	
 	//! Calculate @c this * @c r.conjugate()
-	SO3 operator/(const base& r) const {
+	template<class OtherDerived> EIGEN_STRONG_INLINE 
+	Quaternion operator/(const Eigen::QuaternionBase<OtherDerived> &r) const {
 		return *this * r.conjugate();
 	}
 	
@@ -164,6 +167,13 @@ struct SO3 : public Eigen::Quaternion<_scalar> {
 	template<class Derived>
 	SO3(const Eigen::MatrixBase<Derived>& matrix) : base(matrix) {}
 	
+	/**
+	 * Construct from arbitrary rotation type.
+	 * @note Invalid rotation matrices may lead to spurious behavior.
+	 */
+	template<class Derived>
+	SO3(const Eigen::RotationBase<Derived, 3>& rotation) : base(rotation.derived()) {}
+	
 	//! @name Manifold requirements
 	//{
 	void boxplus(MTK::vectview<const scalar, DOF> vec, scalar scale=1) {
@@ -175,13 +185,13 @@ struct SO3 : public Eigen::Quaternion<_scalar> {
 	}
 	//}
 	
-	friend std::ostream& operator<<(std::ostream &os, const SO3<scalar>& q){
+	friend std::ostream& operator<<(std::ostream &os, const SO3<scalar, Options>& q){
 		return os << q.coeffs().transpose() << " ";
 	}
-	friend std::istream& operator>>(std::istream &is, SO3<scalar>& q){
-		for(int i=0; i<4; ++i)
-			is >> q.coeffs()[i];
-		q.normalize();
+	friend std::istream& operator>>(std::istream &is, SO3<scalar, Options>& q){
+		vect<4,scalar> coeffs;
+		is >> coeffs;
+		q.coeffs() = coeffs.normalized();
 		return is;
 	}
 	
@@ -191,7 +201,9 @@ struct SO3 : public Eigen::Quaternion<_scalar> {
 	 * Calculate the exponential map. In matrix terms this would correspond 
 	 * to the Rodrigues formula.
 	 */
-	static SO3 exp(MTK::vectview<const scalar, 3> dvec, scalar scale = 1){
+	// FIXME vectview<> can't be constructed from every MatrixBase<>, use const Vector3x& as workaround
+//	static SO3 exp(MTK::vectview<const scalar, 3> dvec, scalar scale = 1){
+	static SO3 exp(const Eigen::Matrix<scalar, 3, 1>& dvec, scalar scale = 1){
 		SO3 res;
 		res.w() = MTK::exp<scalar, 3>(res.vec(), dvec, scalar(scale/2));
 		return res;
@@ -207,6 +219,20 @@ struct SO3 : public Eigen::Quaternion<_scalar> {
 	}
 	//}
 };
+
+namespace internal {
+template<class Scalar, int Options>
+struct UnalignedType<SO2<Scalar, Options > >{
+	typedef SO2<Scalar, Options | Eigen::DontAlign> type;
+};
+
+template<class Scalar, int Options>
+struct UnalignedType<SO3<Scalar, Options > >{
+	typedef SO3<Scalar, Options | Eigen::DontAlign> type;
+};
+
+}  // namespace internal
+
 
 }  // namespace MTK
 

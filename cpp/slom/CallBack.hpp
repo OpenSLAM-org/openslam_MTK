@@ -45,21 +45,9 @@
 #include <iostream>
 #include <cassert>
 
-#include <boost/preprocessor/seq.hpp>
-#include <boost/preprocessor/stringize.hpp>
+#include <stack>
 
 #include "TicToc.hpp"
-
-
-
-// These are the possible events:
-#define CALLBACK_EVENTS (createSparse) (optimizeStep) (evaluate) (calculateJacobian) (choleskyDecompose) (choleskySolve) (qrSolve) (calculate_delta)
-
-
-
-// Helper macros for BOOST_SEQ
-#define CALLBACK_COMMA_SEPARATE(unused, data, elem) elem, 
-#define CALLBACK_CASE(unused,data,elem) case elem: return BOOST_PP_STRINGIZE(elem);
 
 
 
@@ -74,10 +62,6 @@ class Estimator;
 class CallBack {
 	
 public:	
-	enum Event { 
-		BOOST_PP_SEQ_FOR_EACH(CALLBACK_COMMA_SEPARATE,~,CALLBACK_EVENTS)
-		numberOfEvents
-	};
 	struct nullstream : std::ostream {
 		struct nullbuf: std::streambuf {
 			int overflow(int c) { return traits_type::not_eof(c); }
@@ -86,8 +70,7 @@ public:
 	} nul;
 	
 protected:
-	// calling Estimator object:
-	const Estimator &parent;
+	std::stack<TicToc> stck;
 	
 	int verbosity_level;
 	
@@ -98,39 +81,28 @@ protected:
 	int depth;
 	
 	
-	inline const char * eventString(Event event){
-		switch(event){
-		BOOST_PP_SEQ_FOR_EACH(CALLBACK_CASE,~,CALLBACK_EVENTS)
-		default: assert(false && "Unknown Event");
-		}
-		return 0;
-	}
-	
-	// A timer for each event:
-	TicToc timer[numberOfEvents];
-	
-	
 public:
-	CallBack(const Estimator &parent, int verbosity = 1, std::ostream &out= std::cout) : parent(parent), verbosity_level(verbosity), out(verbosity > 0 ? out : nul), depth(0) {};
-	virtual ~CallBack() {};
+	__attribute__((deprecated))
+	CallBack(const Estimator & /*parent*/, int verbosity = 1, std::ostream &out= std::cout) : verbosity_level(verbosity), out(out), depth(0) {};
+	CallBack(int verbosity = 1, std::ostream &out= std::cout) : verbosity_level(verbosity), out(out), depth(0) {};
+	virtual ~CallBack() {}
 	
-	virtual void start(Event event){
-		assert(event < numberOfEvents);
-		if(depth<verbosity_level) {
+	virtual void start(const std::string& event) {
+		if(depth < verbosity_level) {
 			for(int i=0; i<depth; i++) out << "\t";
-			out << "starting " << eventString(event) << std::endl;
-			timer[event].tic();
+			out << "starting " << event << std::endl;
+			stck.push(TicToc());
 		}
 		++depth;
 	}
 	
-	virtual void finish(Event event){
-		assert(event < numberOfEvents);
+	virtual void finish(const std::string& event) {
 		--depth;
 		if(depth < verbosity_level) {
 			for(int i=0; i<depth; i++) out << "\t";
-			out << "finished " << eventString(event) << " in "  
-					<< timer[event].toc() << "s" << std::endl;
+			out << "finished " << event << " in "  
+					<< stck.top().toc() << "s" << std::endl;
+			stck.pop();
 		}
 	}
 	
@@ -140,17 +112,15 @@ public:
 		else
 			return nul;
 	}
-	
-	
 };
 
 
 class scoped_callback{
 	CallBack *cb;
-	CallBack::Event e;
+	const std::string e;
 	CallBack::nullstream nul;
-	friend class Estimator;
-	scoped_callback(CallBack *cb, CallBack::Event e) : cb(cb), e(e) {
+public:
+	scoped_callback(CallBack *cb, const std::string& e_) : cb(cb), e(e_) {
 		if(cb)
 			cb->start(e);
 	}
@@ -158,26 +128,28 @@ class scoped_callback{
 		if(cb)
 			cb->finish(e);
 	}
-	std::ostream &output(int verbosity){
+	std::ostream &output(int verbosity) {
 		if(cb)
 			return cb->output(verbosity);
 		else 
 			return nul;
 	}
 	
+	std::ostream & operator()(int verbosity=1) {
+		return output(verbosity);
+	}
+	
 };
 
 }
 
-// undefine internal macros:
-#undef CALLBACK_EVENTS
-#undef CALLBACK_TO_STR
-#undef CALLBACK_COMMA_SEPARATE 
-
-
 // user access macros
-#define CALLBACK_START(event) scoped_callback cb(callback, CallBack:: event);
-#define CALLBACK_FINISH(event) 
+#define SLOM_STRINGIFY(x) SLOM_STRINGIFY_I(x)
+#define SLOM_STRINGIFY_I(x) #x
+
+#define CALLBACK_START(event) scoped_callback cb(getCallback(), SLOM_STRINGIFY(event));
+#define CALLBACK_START_M() scoped_callback cb(getCallback(), __PRETTY_FUNCTION__);
+#define CALLBACK_FINISH(event)
 
 
 #endif /* CALLBACK_H_ */

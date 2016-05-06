@@ -1,11 +1,5 @@
-#define BOOST_TEST_MODULE template_for_test_test
-#include <boost/test/included/unit_test.hpp>
 
-#include "boost_check_close_vector.hh"
-
-#include "random_vector.hh"
-
-#include <iostream>
+#include "test_base.hpp"
 
 #include <mtk/types/SOn.hpp>
 #include <mtk/types/S2.hpp>
@@ -13,14 +7,8 @@
 
 #include "mtk_axioms.hh"
 
-typedef SCALAR scalar;
-
 BOOST_AUTO_TEST_SUITE( mtk_test_suite )
 
-
-random_vector<scalar> r;
-const scalar tol = MTK::tolerance<scalar>();
-const scalar one = 1.0;
 
 
 BOOST_AUTO_TEST_CASE( SO3 )

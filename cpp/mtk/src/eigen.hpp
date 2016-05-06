@@ -68,7 +68,7 @@
 #define MTK_EIGEN 200
 
 // For debugging/compatibility to Eigen3:
-#define EIGEN_ASM_COMMENT(X)  asm("#"X)
+#define EIGEN_ASM_COMMENT(X)  asm("#" X)
 
 #endif
 
@@ -108,6 +108,11 @@ struct VectviewBase {
 
 
 
+template<class T>
+struct UnalignedType {
+	typedef T type;
+};
+
 
 
 }  // namespace internal
@@ -115,5 +120,7 @@ struct VectviewBase {
 }  // namespace MTK
 
 
+#define MTK_ALWAYS_INLINE EIGEN_ALWAYS_INLINE
+#define MTK_DEPRECATED __attribute__((deprecated))
 
 #endif /* EIGEN_HPP_ */

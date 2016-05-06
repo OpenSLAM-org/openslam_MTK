@@ -4,6 +4,7 @@
 #include <string>
 #include <sstream>
 #include <iomanip>
+#include <stdio.h>
 
 
 
@@ -62,7 +63,7 @@ char* ftoa(double d, char * buf){
 
 static inline
 char* itoa_half(unsigned int z, char *buf){
-	typedef unsigned int U;
+//	typedef unsigned int U;
 	
 	z = z * ((1<<28) / 10000 + 1) - (z >> 2);
 	for(int i=0; i<5; ++i){

@@ -104,7 +104,9 @@ public:
 	
 	friend S2 operator*(const SO3<scalar>& rot, const S2& dir)
 	{
-		return rot * dir.vec;
+		S2 ret;
+		ret.vec = rot * dir.vec;
+		return ret;
 	}
 	
 	scalar operator[](int idx) const {return vec[idx]; }

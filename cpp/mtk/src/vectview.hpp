@@ -63,17 +63,18 @@ public:
 	//! base type
 	typedef typename VectviewBase::Type base;
 	//! construct from pointer
-	vectview(scalar* data) : base(data) {}
+	explicit
+	vectview(scalar* data, int dim_=dim) : base(data, dim_) {}
 	//! construct from plain matrix
-	vectview(matrix_type& m) : base(m.data()) {}
+	vectview(matrix_type& m) : base(m.data(), m.size()) {}
 	//! construct from another @c vectview
 	vectview(const vectview &v) : base(v) {}
 	//! construct from Eigen::Block:
 #if MTK_EIGEN >= 300
 	template<class Base>
-	vectview(Eigen::VectorBlock<Base, dim> block) : base(&block.coeffRef(0)) {}
-	template<class Base, bool PacketAccess, bool DirectAccessStatus>
-	vectview(Eigen::Block<Base, dim, 1, PacketAccess, DirectAccessStatus> block) : base(&block.coeffRef(0)) {}
+	vectview(Eigen::VectorBlock<Base, dim> block) : base(&block.coeffRef(0), block.size()) {}
+	template<class Base, bool PacketAccess>
+	vectview(Eigen::Block<Base, dim, 1, PacketAccess> block) : base(&block.coeffRef(0), block.size()) {}
 #else
 	template<class Base, int PacketAccess, int DirectAccessStatus>
 	vectview(Eigen::Block<Base, dim, 1, PacketAccess, DirectAccessStatus> block) : base(&block.coeffRef(0)) {}
@@ -103,7 +104,8 @@ public:
 	//! base type
 	typedef typename VectviewBase::ConstType base;
 	//! construct from const pointer
-	vectview(const scalar* data) : base(data) {}
+	explicit
+	vectview(const scalar* data, int dim_ = dim) : base(data, dim_) {}
 	//! construct from column vector
 	template<int options>
 	vectview(const Eigen::Matrix<scalar, dim, 1, options>& m) : base(m.data()) {}
@@ -111,7 +113,7 @@ public:
 	template<int options, int phony>
 	vectview(const Eigen::Matrix<scalar, 1, dim, options, phony>& m) : base(m.data()) {}
 	//! construct from another @c vectview
-	vectview(const vectview<scalar, dim> &x) : base(x) {}
+	vectview(vectview<scalar, dim> x) : base(x.data()) {}
 	//! construct from base
 	vectview(const base &x) : base(x) {}
 	/**
@@ -121,8 +123,8 @@ public:
 #if MTK_EIGEN >= 300
 	template<class Base>
 	vectview(Eigen::VectorBlock<Base, dim> block) : base(&block.coeffRef(0)) {}
-	template<class Base, bool PacketAccess, bool DirectAccessStatus>
-	vectview(Eigen::Block<Base, dim, 1, PacketAccess, DirectAccessStatus> block) : base(&block.coeffRef(0)) {}
+	template<class Base, bool PacketAccess>
+	vectview(Eigen::Block<Base, dim, 1, PacketAccess> block) : base(&block.coeffRef(0)) {}
 #else
 	template<class Base, int PacketAccess, int DirectAccessStatus>
 	vectview(Eigen::Block<Base, dim, 1, PacketAccess, DirectAccessStatus> block) : base(&block.coeffRef(0)) {}

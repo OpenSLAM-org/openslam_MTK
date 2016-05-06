@@ -83,48 +83,52 @@ enum CM {
  * Notice that often @f$\Sigma @f$ or @f$\Omega @f$ have diagonal structure, 
  * in which case simple element-wise multiplication/division is more efficient.
  */
-template<int dim>
+template<int dim, class scalar = double>
 struct CholeskyCovariance
 {
 	enum {DIM = dim, SIZE = (dim*(dim+1))/2};
 	// chol is a lower triangular matrix, saved in row major order
-	double chol[SIZE];
+	scalar chol[SIZE];
 	
 	
 	CholeskyCovariance() {};
 	
-	CholeskyCovariance(const double *A, CholeskyMode::CM mode){
+	CholeskyCovariance(const scalar *A, CholeskyMode::CM mode){
 		bool skip = false;
 		switch(mode){
 		case CholeskyMode::COPY_LOWER:
 			skip = true;
+			// no break
 		case CholeskyMode::COPY_LOWER_FULL:
 			copyCholeskyLower(A, skip);
 			break;
 		case CholeskyMode::COPY_UPPER:
 			skip = true;
+			// no break
 		case CholeskyMode::COPY_UPPER_FULL:
 			copyCholeskyUpper(A, skip);
 			break;
 		case CholeskyMode::CHOLESKY_UPPER:
 			skip = true;
+			// no break
 		case CholeskyMode::CHOLESKY_FULL:
 			calculateCholesky(A, skip);
 			break;
 		default:
-			assert(false); //Unknown CholeskyMode
+			assert(false && "Unknown CholeskyMode");
+			break;
 		}
 	}
 	/**
 	 * Initialize by copying lower values from data.
 	 */
-	void copyCholeskyLower(const double *A, bool skip){
+	void copyCholeskyLower(const scalar *A, bool skip){
 		if(skip){
 			std::copy(A, A+SIZE, chol);
 			return;
 		}
-		const double *a = A;
-		double *rowi = chol;
+		const scalar *a = A;
+		scalar *rowi = chol;
 		for(int i=1; i<=DIM; i++){
 			for(int j=0; j<i; j++){
 				*rowi++ = *a++;
@@ -137,11 +141,11 @@ struct CholeskyCovariance
 	/**
 	 * Initialize by copying upper values from data.
 	 */
-	void copyCholeskyUpper(const double *A, bool skip){
-		const double *a = A;
+	void copyCholeskyUpper(const scalar *A, bool skip){
+		const scalar *a = A;
 		for(int i=0; i<DIM; ++i)
 		{ // copy row i from A to col i from chol
-			double *coli = chol + ( (i*(i+3)) >> 1);
+			scalar *coli = chol + ( (i*(i+3)) >> 1);
 			if(!skip){ // skip the first elements of this row in A:
 				a += i;
 			}
@@ -161,20 +165,20 @@ struct CholeskyCovariance
 	 * (As A is symmetric, you can substitute "row major" by "column major"
 	 * and every "upper" by "lower")
 	 */
-	void calculateCholesky(const double *A, bool skip){
-		const double *a = A;
-		double *coli = chol;
+	void calculateCholesky(const scalar *A, bool skip){
+		const scalar *a = A;
+		scalar *coli = chol;
 		for(int i=0; i<DIM; i++){
 			if(!skip){ // skip the first elements of this row in A:
 				a += i;
 			}
 			coli += i; // start of column i
 			// C(i,i) = sqrt(A(i,i) - C(0:i,i)'*C(0:i,i))
-			double sum = *a++ - std::inner_product(coli, coli+i, coli, 0.0 );
+			scalar sum = *a++ - std::inner_product(coli, coli+i, coli, 0.0 );
 			assert(sum>0);
-			double sqrtSum = coli[i] = sqrt(sum);
+			scalar sqrtSum = coli[i] = sqrt(sum);
 			sqrtSum = 1/sqrtSum;
-			double *colj = coli;
+			scalar *colj = coli;
 			for(int j=i+1; j<DIM; j++){
 				colj += j;
 				// C(i,j) = (A(i,j) - C(0:i,i)'*C(0:i,j))/C(i,i)
@@ -185,14 +189,39 @@ struct CholeskyCovariance
 	}
 	
 	/**
+	 * Inverts the matrix in-place.
+	 * Especially for small matrices this can reduce the number of division necessary when applying it.
+	 */
+	void invert() {
+		scalar *c = chol;
+		for(int i=0; i<DIM; ++i) {
+			// multiply current row from the right by already inverted part of chol:
+			scalar *row = c, *c_i = chol;
+			for(int j=0; j<i; ++j) {
+				for(int k=0; k<j; ++k) {
+					row[k] += row[j] * *c_i++;
+				}
+				row[j] *= *c_i++; // multiply current element by diagonal element
+			}
+			// invert diagonal element:
+			scalar &diag = c[i]; diag = scalar(1)/diag;
+			// multiply row by negative inverse of diag:
+			for(int j=0; j<i; ++j) {
+				row[j] *= -diag;
+			}
+			c += (i+1);
+		}
+	}
+	
+	/**
 	 * multiplies arr[0,dim) by inverse of this Cholesky factor.
 	 * I.e. computes @f$ chol^{-1}\cdot arr@f$;
 	 */
-	void invApply(MTK::vectview<double, DIM> arr) const {
-		const double *c = chol;
-		for(double *a = arr.data(); a < arr.data() + DIM; ++a){
-			double ai = *a;
-			for(double *b=arr.data(); b<a; ++b){
+	void invApply(MTK::vectview<scalar, dim> arr) const {
+		const scalar *c = chol;
+		for(scalar *a = arr.data(); a < arr.data() + DIM; ++a){
+			scalar ai = *a;
+			for(scalar *b=arr.data(); b<a; ++b){
 				ai -= *c++ * *b;
 			}
 			*a = ai / *c++;
@@ -203,11 +232,11 @@ struct CholeskyCovariance
 	 * multiplies arr[0,dim) by this Cholesky factor.
 	 * I.e. computes chol*arr;
 	 */
-	void apply(MTK::vectview<double, DIM> arr) const {
-		const double *c = chol + SIZE -1;
-		for(double *a=arr.data() + DIM - 1; a >= arr.data(); --a){
+	void apply(MTK::vectview<scalar, dim> arr) const {
+		const scalar *c = chol + SIZE -1;
+		for(scalar *a=arr.data() + DIM - 1; a >= arr.data(); --a){
 			*a *= *c--;
-			for(double *b = a-1; b>= arr.data(); --b){
+			for(scalar *b = a-1; b>= arr.data(); --b){
 				*a += *c-- * *b;
 			}
 		}

@@ -41,7 +41,10 @@
 
 #include <boost/array.hpp>
 #include <map>
+#include <fstream>
 
+
+#include <slom/Optimizer.hpp>
 #include <slom/Estimator.hpp>
 #include <slom/CholeskyCovariance.hpp>
 #include <slom/TicToc.hpp>
@@ -54,6 +57,19 @@
 //#include <mtk/types/SOn.h>
 
 
+template<class PoseType>
+SLOM_BUILD_MEASUREMENT(OdoM, PoseType::DOF,
+		((PoseType, t0)) ((PoseType, t1)),
+		((PoseType, odo))
+)
+
+template<class PoseType>
+SLOM_IMPLEMENT_MEASUREMENT(OdoM<PoseType>, ret){
+	PoseType diff = t0->world2Local(*t1);
+	diff.boxminus(ret, odo);
+}
+
+
 
 // AutoConstruct does not work properly with templated types
 template<class PoseType, class PoseDiffType=PoseType>
@@ -61,15 +77,16 @@ struct OdoT {
 	SLOM_VAR_REF_TYPE(PoseType, 0) t0;
 	SLOM_VAR_REF_TYPE(PoseType, PoseType::DOF) t1;
 	enum {DIM = PoseDiffType::DOF, DEPEND=2*PoseType::DOF}; 
+	enum {dim=DIM}; 
 	
 	PoseDiffType odo;
 	OdoT( SLOM::VarID<PoseType> t0, SLOM::VarID<PoseType> t1, const PoseDiffType &odo ) : 
 		t0(t0), t1(t1), odo(odo) {}
 	template<class Func> 
-	void traverse_variables(Func __function) { 
+	void traverse_variables(Func __function) const { 
 		__function(t0); __function(t1);
 	}
-	void eval(MTK::vectview<double, DIM> __ret, bool numerical_jacobian) const
+	void eval(MTK::vectview<double, DIM> __ret, bool /*numerical_jacobian*/) const
 	{ eval(__ret);}
 	void eval(MTK::vectview<double, DIM> __ret) const {
 		PoseDiffType diff = t0->world2Local(*t1);
@@ -86,7 +103,7 @@ struct OdoTCov : public OdoT<PoseType, PoseDiffType> {
 			const PoseDiffType &odo, const SLOM::CholeskyCovariance<DIM> &cov) : 
 				base(t0, t1, odo), cov(cov) {}
 	void eval(MTK::vectview<double, DIM> __ret, bool numerical_jacobian) const
-	{ eval(__ret);}
+	{ (void)numerical_jacobian; eval(__ret);}
 	void eval(MTK::vectview<double, DIM> __ret) const {
 		base::eval(__ret);
 		if(cov_inverse > 0)
@@ -102,6 +119,7 @@ struct OdoTCov : public OdoT<PoseType, PoseDiffType> {
 template<class PoseType, class PoseDiffType=PoseType>
 class RelationParser 
 {
+	SLOM::Optimizer &optim;
 	SLOM::Estimator &e;
 	
 	typedef PoseType Pose;
@@ -144,7 +162,7 @@ private:
 	
 	
 public:
-	RelationParser(SLOM::Estimator &e, bool fix1stPose = true, unsigned int seed=5489) : e(e), rng(seed) {
+	RelationParser(SLOM::Optimizer &optim, bool fix1stPose = true, unsigned int seed=5489) : optim(optim), e(optim.getEstimator()), rng(seed) {
 		fixFirstPose(fix1stPose);
 	}
 	
@@ -226,6 +244,7 @@ public:
 	}
 	
 	void iterate(int max_steps, const std::string& outname, OutputPose outputPose, std::ostream& statstream = std::cout) {
+		(void) outputPose; // FIXME parameter is not used
 		TicToc timer;
 		
 		statstream << "# Step\ttime\tRSS\n";
@@ -234,7 +253,8 @@ public:
 			if(!outname.empty())
 				outputPoses(make_filename(outname, k, ".pos"));
 			double rss = e.getRSS(); // evaluate RSS before getting the time
-			statstream << k << "\t" << timer() << "\t" << rss << std::endl;
+			statstream << k << "\t" << timer() << "\t" << rss << "\t" 
+					<<e.getSquaredNormOfGradient()  << std::endl;
 			
 			if( max_steps > 0 && 0 <= gain && gain < 1e-9){
 				max_steps = k+1; // output stats, then quit
@@ -243,7 +263,7 @@ public:
 					gain = e.optimizeStep();
 				} catch(const char* err) {
 					for(++k ; k < -max_steps; ++k){ // for negative max_steps fill statstream with inf entries
-						statstream << k << "\t" << timer() << "\tinf" << std::endl;
+						statstream << k << "\t" << timer() << "\tinf\tinf" << std::endl;
 					}
 					throw err;
 				}

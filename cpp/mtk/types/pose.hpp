@@ -161,8 +161,28 @@ public:
 	{
 		return world2Local(trafo());
 	}
+	
+	
+	// FIXME fatal also implement /, % and provide unit-tests
+	trafo operator*(const rotation_type& rot) const {
+		return trafo(orient * rot, pos);
+	}
+	friend 
+	trafo operator*(const rotation_type& rot, const trafo& traf) {
+		return trafo(rot * traf.orient, rot*traf.pos);
+	}
 };
 
+
+
+namespace internal {
+template<class RotationType, bool Trans1st, class VectType>
+struct UnalignedType<trafo<RotationType, Trans1st, VectType > >{
+	typedef trafo<typename UnalignedType<RotationType>::type, Trans1st, typename UnalignedType<VectType>::type > type;
+};
+
+
+}  // namespace internal
 
 
 

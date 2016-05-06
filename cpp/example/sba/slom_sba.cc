@@ -125,7 +125,7 @@ void slom_sba(std::istream &cams, std::istream &pts, std::istream *calib,
 {
 	TicToc t;
 	SLOM::Estimator e;
-	SLOM::CallBack cb(e, 10);
+	SLOM::CallBack cb(10);
 	if(0)
 		e.setCallBack(cb);
 	
@@ -200,7 +200,7 @@ void slom_sba(std::istream &cams, std::istream &pts, std::istream *calib,
 	
 	
 	/// optimize
-	e.changeAlgorithm(SLOM::Estimator::Levenberg, 1e3);
+	e.changeAlgorithm(new SLOM::LevenbergMarquardt(1e3));
 	
 	std::cerr << poses.size() << " " << landmarks.size() << "\nInitialization took " << t() << std::endl;
 	

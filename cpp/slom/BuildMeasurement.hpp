@@ -39,9 +39,8 @@
 #define SLOM_AUTOCONSTRUCT_H_
 
 
-#include <boost/type_traits.hpp>
-
 #include "../mtk/build_manifold.hpp"
+#include "src/SparseFunction.hpp"
 
 
 /** define a variable id named @c name_id for the variable @c name */
@@ -78,10 +77,18 @@
  * @c SLOM_IMPLEMENT_MEASUREMENT.
  */
 #define SLOM_BUILD_MEASUREMENT(name, dim, variables, data) \
-SLOM_BUILD_MEASUREMENT_EXTENDIBLE(name, dim, variables, data) \
-{ eval(__ret);} \
+SLOM_BUILD_MEASUREMENT_EXTENDIBLE(name, dim, variables, data, 0) \
+{ (void) numerical_jacobian; eval(__ret);} \
 void eval(MTK::vectview<double, DIM> __ret) const \
 SLOM_CLOSE_MEASUREMENT_EXTENDIBLE(name)
+
+#define SLOM_BUILD_MEASUREMENT_DYNAMIC(name, variables, data) \
+SLOM_BUILD_MEASUREMENT_EXTENDIBLE(name, Eigen::Dynamic, variables, data, 1) \
+{ (void)numerical_jacobian; eval(__ret);} \
+void eval(MTK::vectview<double, -1> __ret) const \
+SLOM_CLOSE_MEASUREMENT_EXTENDIBLE(name)
+
+
 
 /**
  * 
@@ -101,6 +108,7 @@ SLOM_CLOSE_MEASUREMENT_EXTENDIBLE(name)
 	void name::eval(MTK::vectview<double, name::DIM> ret_name) const
 
 
+
 /**
  * SLOM_BUILD_MEASUREMENT_EXTENDIBLE(name, dim, variables, data)
  * generates extendible measurements.
@@ -109,15 +117,18 @@ SLOM_CLOSE_MEASUREMENT_EXTENDIBLE(name)
  * It must be finished by SLOM_CLOSE_MEASUREMENT_EXTENDIBLE()
  * @warning Experimental feature
  */
-#define SLOM_BUILD_MEASUREMENT_EXTENDIBLE(name, dim, variables, data) \
+#define SLOM_BUILD_MEASUREMENT_EXTENDIBLE(name, dim_, variables, data, dynamic) \
 struct name { \
-	enum {DIM = dim}; \
+	enum {DIM = dim_}; \
+	BOOST_PP_IIF(dynamic, const int dim;, enum {dim=DIM};) \
 	SLOM_VARREFLIST(variables) \
 	MTK_TRANSFORM(SLOM_MSRMNT_GENERATE_DATALIST, data)     \
 	name( \
+		BOOST_PP_IIF(dynamic, int dim BOOST_PP_COMMA, BOOST_PP_EMPTY)() \
 		MTK_TRANSFORM_COMMA(SLOM_MSRMNT_CONSTRUCTOR_ARG, variables) \
 		MTK_TRANSFORM(SLOM_MSRMNT_CONSTRUCTOR_ARG_D, data) \
 		) : \
+		BOOST_PP_IIF(dynamic, dim(dim) BOOST_PP_COMMA, BOOST_PP_EMPTY)() \
 		MTK_TRANSFORM_COMMA(SLOM_MSRMNT_GENERATE_CONSTRUCTOR, variables) \
 		MTK_TRANSFORM(SLOM_MSRMNT_GENERATE_CONSTRUCTOR_D, data) {}\
 	template<class Func> \
@@ -155,7 +166,22 @@ namespace internal {
 
 template<class T>
 struct add_const_ref{
-	typedef typename boost::add_reference<typename boost::add_const<T>::type>::type type;
+	typedef const T& type;
+};
+
+template<class T>
+struct add_const_ref<const T>{
+	typedef const T& type;
+};
+
+template<class T>
+struct add_const_ref<T&> {
+	typedef T& type;
+};
+
+template<class T>
+struct add_const_ref<const T&>{
+	typedef const T& type;
 };
 
 }  // namespace internal
@@ -165,13 +191,17 @@ struct add_const_ref{
 	typedef SLOM::MeasID<name> id; \
 };
 
+// FIXME WORK IN PROGRESS!!!
 #define SLOM_VAR_REF_TYPE(type, idx) SLOM::internal::IMeasurement_Holder::VarRef<type, idx>
 #define SLOM_VAR_ID_TYPE(type) SLOM::VarID<type>
 
 #define SLOM_MSRMNT_GENERATE_VARLIST(type, id) SLOM_VAR_REF_TYPE(type, 0) id;
 #define SLOM_MSRMNT_GENERATE_DATALIST(type, id) type id;
 #define SLOM_MSRMNT_CONSTRUCTOR_ARG(type, id) SLOM_VAR_ID_TYPE(type) id
-#define SLOM_MSRMNT_CONSTRUCTOR_ARG_D(type_, id) , SLOM::internal::add_const_ref<type_ >::type id
+//#define SLOM_MSRMNT_CONSTRUCTOR_ARG_D(type_, id) , boost::add_reference<boost::add_const<type_ >::type>::type id
+// FIXME optional typename is not C++03 conforming
+#define SLOM_MSRMNT_CONSTRUCTOR_ARG_D(type_, id) , typename SLOM::internal::add_const_ref<type_ >::type id
+//#define SLOM_MSRMNT_CONSTRUCTOR_ARG_D(type_, id) , const type_ & id
 #define SLOM_MSRMNT_GENERATE_CONSTRUCTOR(type, id) id(id)
 #define SLOM_MSRMNT_GENERATE_CONSTRUCTOR_D(type, id) , id(id)
 #define SLOM_MSRMNT_GENERATE_DEPEND(type, id) + type::DOF

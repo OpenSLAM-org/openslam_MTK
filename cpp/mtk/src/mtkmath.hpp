@@ -40,8 +40,9 @@
 #define MTKMATH_H_
 
 #include <cmath>
+#include <boost/math/tools/precision.hpp>
 
-#include "vectview.hpp"
+#include "mtk/types/vect.hpp"
 
 #ifndef M_PI
 #define M_PI  3.1415926535897932384626433832795
@@ -89,20 +90,64 @@ template<> inline double tolerance<double>() { return 1e-11; }
 template<class scalar>
 inline scalar normalize(scalar x, scalar bound){
 	if(std::fabs(x) <= bound) return x;
-	int r = (int)(x / bound);
+	int r = (int)(x *(scalar(1.0)/ bound));
 	return x - ((r + (r>>31) + 1) & ~1)*bound; 
 }
 
 
+//TODO this implementation might be faster?
+inline double normalize2(double x, double interval){
+	return x - interval * (rint(x * (1.0/interval)));
+}
+
+/**
+ * Calculate cosine and sinc of sqrt(x2).
+ * @param x2 the squared angle must be non-negative
+ * @return a pair containing cos and sinc of sqrt(x2)
+ */
+template<class scalar>
+std::pair<scalar, scalar> cos_sinc_sqrt(const scalar &x2){
+	using std::sqrt;
+	using std::cos;
+	using std::sin;
+	static scalar const taylor_0_bound = boost::math::tools::epsilon<scalar>();
+	static scalar const taylor_2_bound = sqrt(taylor_0_bound);
+	static scalar const taylor_n_bound = sqrt(taylor_2_bound);
+	
+	assert(x2>=0 && "argument must be non-negative");
+	
+	// FIXME check if bigger bounds are possible
+	if(x2>=taylor_n_bound) {
+		// slow fall-back solution
+		scalar x = sqrt(x2);
+		return std::make_pair(cos(x), sin(x)/x); // x is greater than 0.
+	}
+	
+	// FIXME Replace by Horner-Scheme (4 instead of 5 FLOP/term, numerically more stable, theoretically cos and sinc can be calculated in parallel using SSE2 mulpd/addpd)
+	// TODO Find optimal coefficients using Remez algorithm
+	static scalar const inv[] = {1/3., 1/4., 1/5., 1/6., 1/7., 1/8., 1/9.};
+	scalar cosi = 1., sinc=1;
+	scalar term = -1/2. * x2;
+	for(int i=0; i<3; ++i) {
+		cosi += term;
+		term *= inv[2*i];
+		sinc += term;
+		term *= -inv[2*i+1] * x2;
+	}
+	
+	return std::make_pair(cosi, sinc);
+	
+}
+
+
+
 template<class scalar, int n>
 scalar exp(vectview<scalar, n> result, vectview<const scalar, n> vec, const scalar& scale = 1) {
-	scalar norm = vec.norm();
-	// protect against division by zero:
-	norm = std::max(norm,  tolerance<scalar>());
-	scalar alpha = scale * norm;
-	scalar mult = std::sin(alpha) / norm;
+	scalar norm2 = vec.squaredNorm();
+	std::pair<scalar, scalar> cos_sinc = cos_sinc_sqrt(scale*scale * norm2);
+	scalar mult = cos_sinc.second * scale; // == std::sin(alpha) / norm;
 	result = mult * vec;
-	return std::cos(alpha);
+	return cos_sinc.first;
 }
 
 
@@ -120,13 +165,14 @@ void log(vectview<scalar, n> result,
 		const scalar &w, const vectview<const scalar, n> vec,
 		const scalar &scale, bool plus_minus_periodicity)
 {
+	// FIXME implement optimized case for vec.squaredNorm() <= tolerance() * (w*w) via Rational Remez approximation ~> only one division
 	scalar nv = vec.norm();
 	if(nv < tolerance<scalar>()) {
-		if(!plus_minus_periodicity) {
+		if(!plus_minus_periodicity && w < 0) {
 			// find the maximal entry:
 			int i;
-			vec.maxCoeff(&i);
-			result = scale * std::atan2(0, w) * vect<n, scalar>::Unit(i);
+			nv = vec.cwiseAbs().maxCoeff(&i);
+			result = scale * std::atan2(nv, w) * vect<n, scalar>::Unit(i);
 			return;
 		}
 		nv = tolerance<scalar>();

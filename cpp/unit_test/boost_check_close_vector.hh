@@ -49,8 +49,8 @@ public:
 	bool        operator()( comp_type left, comp_type right ) const
 	{
 		FPT diff = ( left - right ).norm();
-		FPT d1   = tt_detail::safe_fpt_division( diff, right.norm() );
-		FPT d2   = tt_detail::safe_fpt_division( diff, left.norm() );
+		FPT d1   = tt_detail::safe_fpt_division( diff, 1 + right.norm() );  // modification: 1 + ... to check for absolute closeness
+		FPT d2   = tt_detail::safe_fpt_division( diff, 1 + left.norm() );
 		
 		return p_strong_or_weak 
 		? (d1 <= p_fraction_tolerance && d2 <= p_fraction_tolerance) 

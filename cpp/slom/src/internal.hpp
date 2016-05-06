@@ -59,13 +59,53 @@ struct IMeasurement_Holder;
 
 struct IRVHolder : public indexed_list_hook
 {
-	typedef std::deque<const IMeasurement_Holder*> measurement_container;
+	struct measurement_ptr {
+		const IMeasurement_Holder* ptr;
+		
+#ifdef SLOM_JACOBI_BLOCKS
+		// FIXME back-propagate constness
+		const double* jac_block; // first entry of the variable's subblock in the jacobian of the measurement
+#endif
+		int measurement_dim;     //dimension of the measurement
+		
+		// FIXME for extreme optimization: function pointers to optimized matrix multiplication routines
+		
+		// FIXME remove default values
+		measurement_ptr(const IMeasurement_Holder* ptr, double* jac_block = 0, int measurement_dim = 0)
+			: ptr(ptr), 
+#ifdef SLOM_JACOBI_BLOCKS
+			  jac_block(jac_block), 
+#endif
+			  measurement_dim(measurement_dim) { (void) jac_block;}
+		
+		inline double * eval(double* res, bool numerical_jacobian = false) const;
+		
+		operator const IMeasurement_Holder*() const {return ptr;}
+		
+		const IMeasurement_Holder * operator->() const {
+			return ptr;
+		}
+		const IMeasurement_Holder & operator*() const {
+			return *ptr;
+		}
+		
+		bool operator==(const IMeasurement_Holder *other) const {
+			return (ptr == other);
+		}
+		
+#ifdef SLOM_JACOBI_BLOCKS
+		template<int DimVar>
+		Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, DimVar> > JacBlock() const {
+			return Eigen::Matrix<double, Eigen::Dynamic, DimVar>::Map(jac_block, measurement_dim, DimVar);
+		}
+#endif
+	};
+	typedef std::deque<measurement_ptr> measurement_container;
+//	typedef std::deque<const IMeasurement_Holder*> measurement_container;
 	measurement_container measurements; // maybe a single linked pointer list?
+	int measurementDimension;
 	bool optimize;
 	bool isRegistered;
-	
-	template<class M>
-	struct holder;
 	
 	IRVHolder(bool optimize) : optimize(optimize), isRegistered(false) {}
 	
@@ -73,25 +113,19 @@ struct IRVHolder : public indexed_list_hook
 		return !measurements.empty();
 	}
 	
+	
 	/**
 	 * Registers a Measurement and returns the DOFs if this variable is to be optimized.
 	 */
-	int registerMeasurement(const IMeasurement_Holder* m){
-		assert (isRegistered);
-		measurements.push_back(m);
-		return optimize ? getDOF() : 0;
-	}
+	inline
+	int registerMeasurement(const IMeasurement_Holder* m, double* jac, int dim);
 	
 	/**
 	 * Unregisters a Measurement and returns the DOFs if this variable is to be optimized.
 	 */
-	int unregisterMeasurement(const IMeasurement_Holder* m){
-		assert (isRegistered);
-		measurement_container::iterator it = std::find(measurements.begin(), measurements.end(), m);
-		assert(it != measurements.end() && "Tried to remove an unregistered measurement!"); 
-		measurements.erase(it);
-		return optimize ? getDOF() : 0;
-	}
+	inline
+	int unregisterMeasurement(const IMeasurement_Holder* m, int dim);
+
 	
 	/**
 	 * Return the total dimensionality of measurements depending on this variable.
@@ -106,8 +140,27 @@ struct IRVHolder : public indexed_list_hook
 	virtual const double* boxplus(const double* vec, double scale=1) = 0;
 	virtual void store() = 0;
 	virtual void restore() = 0;
+	
+	
+	
+#ifdef SLOM_JACOBI_BLOCKS
+	/**
+	 * Calculate the Jacobi-Block preconditioner for this variable.
+	 */
+	virtual void calcBlockJacobi() {};
+	/**
+	 * Apply the the Jacobi-Block preconditioner to the vector starting at vec.
+	 * Returns vec+DOF, to simplify iteration.
+	 */
+	virtual double * applyBlockJacobi(double * vec, bool transpose) const = 0;
+#endif
+
 };
-typedef indexed_list<IRVHolder> RVList;
+
+template<class>
+class RVHolder;
+
+typedef indexed_list<IRVHolder, RVHolder> RVList;
 
 /**
  * IMeasurement_Holder is (the node of) an intrusive list of all measurements.
@@ -120,57 +173,48 @@ struct IMeasurement_Holder : public indexed_list_hook
 	virtual int getDim() const = 0;
 	virtual double* eval(double*, bool numerical_jacobian) const = 0;
 	
-	template<class M>
-	struct holder;
 	template<class Type, int idx>
 	struct VarRef;
 protected:
 	friend class SLOM::SparseFunction;
 	
+#ifdef SLOM_EXPERIMENTAL
+	// TODO addJ** methods should be const
+	//! adds JtJ blocks to corresponding blocks in referenced Variables.
+	virtual void addJtJ()= 0;
+	virtual double* addJv(double *res, const double *v) = 0;
+	virtual const double* addJtu(double *res, const double *u) = 0;
+#endif /* SLOM_EXPERIMENTAL */
+
+#ifdef SLOM_JACOBI_BLOCKS
+	virtual void updateJacobian() = 0;
+#endif
 	
-	void register_at_variables(int& count, IRVHolder* rv) const {
-		count += rv->registerMeasurement(this);
-	}
-	void unregister_at_variables(int& count, IRVHolder* rv) const {
-		count += rv->unregisterMeasurement(this);
-	}
+//	void register_at_variables(int& count, IRVHolder* rv) const {
+//		count += rv->registerMeasurement(this);
+//	}
+//	void unregister_at_variables(int& count, IRVHolder* rv) const {
+//		count += rv->unregisterMeasurement(this);
+//	}
 };
 
-template<class M>
-class IRVHolder::holder : public IRVHolder
-{
-	template<class, int>
-	friend class IMeasurement_Holder::VarRef;
-	friend class VarID<M>;
-	M var;
-	M backup;
-public:
-	enum {DOF = M::DOF, DIM = DOF}; // DIM is needed for indexed_list
-	holder(const M& v=M(), bool optimize=true) : IRVHolder(optimize), var(v), backup(v) {}
-	int getDOF() const {return DOF;}
-	const double* boxplus(const double* vec, double scale=1) {
-		var = backup;
-		var.boxplus(vec, scale);
-		return vec + DOF;
-	}
-	void store() {backup = var;}
-	void restore() {var = backup;}
-	
-	void reset(const M& m){
-		var = backup = m;
-	}
-	
-	// maybe make alignment conditional?
-	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-};
 
+
+
+
+
+
+template<class Measurement>
+struct Measurement_Holder;
 
 template<class M, int idx_in_Measurement>
 struct IMeasurement_Holder::VarRef : public SLOM::VarID<M>{
 	enum { IDX = idx_in_Measurement };
 	typedef SLOM::VarID<M> base;
 	using base::ptr;
-	VarRef(const base &m) : base(m) {assert(m.ptr->isRegistered);}
+	VarRef(const base &m) : base(m) {
+		assert(m.ptr && m.ptr->isRegistered && "You must register variables before passing them to measurements");
+	}
 	
 //	VarRef() {} // no standard constructor necessary!
 	
@@ -179,6 +223,15 @@ struct IMeasurement_Holder::VarRef : public SLOM::VarID<M>{
 	
 	operator IRVHolder*() const { return ptr; }
 	
+private:
+#ifdef SLOM_JACOBI_BLOCKS
+	template<class Measurement>
+	friend class Measurement_Holder<Measurement>::JacobiUpdater;
+#endif
+	
+	// access to non-const var:
+	M& var() const {return ptr->var;}
+
 	/* TODO
 	 * maybe also make VarRef a linked list (for the measurements container in IRVHolder)
 	 * using also a pointer to the encapsulating IMeasurement.
@@ -201,40 +254,35 @@ int IRVHolder::measurementDimensions() const {
 	return dim;
 }
 
-/**
- * Actual implementation of an \c IMeasurement_Holder
- * @tparam Measurement determines the type of the measurement
- */
-template<class Measurement>
-struct IMeasurement_Holder::holder : IMeasurement_Holder {
-	Measurement m_;
-	holder(const Measurement & m) : m_(m) { }
-	
-	enum {DIM = Measurement::DIM};
-	
-	int getDim() const { return DIM; }
-	double* eval(double* ret, bool numerical_jacobian = false) const {
-		m_.eval(ret, numerical_jacobian);
-		return ret + DIM;
-	}
-	
-	int registerVariables() { // FIXME this method could actually be const, but boost::bind doesn't support that
-		int count = 0;
-		m_.traverse_variables(boost::bind(&IMeasurement_Holder::register_at_variables, this, boost::ref(count), _1));
-		return count * DIM;
-	}
-	
-	int unregisterVariables() {
-		int count = 0;
-		m_.traverse_variables(boost::bind(&IMeasurement_Holder::unregister_at_variables, this, boost::ref(count), _1));
-		return count * DIM;
-	}
-	
-	// this is necessary, if Measurement has variables, which need to be aligned:
-	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-};
+typedef indexed_list<IMeasurement_Holder, Measurement_Holder> MeasurementList;
 
-typedef indexed_list<IMeasurement_Holder> MeasurementList;
+int IRVHolder::registerMeasurement(const IMeasurement_Holder* m, double * jac, int dim){
+	assert (isRegistered && "Variable is not registered");
+	assert(dim == m->getDim() && "Dimensions do not match");
+	measurements.push_back(measurement_ptr(m, jac, dim));
+	measurementDimension += dim;
+	// FIXME This is now called with the actual type of the Variable known, so no virtual call is required.
+	return optimize ? getDOF() : 0;
+}
+
+/**
+ * Unregisters a Measurement and returns the DOFs if this variable is to be optimized.
+ */
+int IRVHolder::unregisterMeasurement(const IMeasurement_Holder* m, int dim){
+	assert (isRegistered);
+	assert(dim == m->getDim() && "Dimensions do not match");
+	measurement_container::iterator it = std::find(measurements.begin(), measurements.end(), m);
+	assert(it != measurements.end() && "Tried to remove an unregistered measurement!"); 
+	measurements.erase(it);
+	measurementDimension -= dim;
+	return optimize ? getDOF() : 0;
+}
+
+inline double * IRVHolder::measurement_ptr::eval(double* res, bool numerical_jacobian) const {
+	return ptr->eval(res, numerical_jacobian);
+}
+
+
 
 
 }  // namespace internal

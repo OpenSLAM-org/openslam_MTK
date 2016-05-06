@@ -64,6 +64,11 @@ struct SubManifold : public T
 	//! manifold type
 	typedef T type;
 	
+	//! Construct from derived type
+	template<class X>
+	explicit
+	SubManifold(const X& t) : T(t) {}
+	
 	//! Construct from internal type
 	SubManifold(const T& t) : T(t) {}
 	

@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2008--2011, Universitaet Bremen
+ *  Copyright (c) 2008--2015, Universitaet Bremen
  *  All rights reserved.
  *
  *  Author: Christoph Hertzberg <chtz@informatik.uni-bremen.de>
@@ -40,9 +40,34 @@
 
 #include "src/SparseFunction.hpp"
 
+#include "solvers/CholeskySolver.hpp"
 
+#include "algorithms/GaussNewton.hpp"
+#include "algorithms/LevenbergMarquardt.hpp"
+
+#include "preconditioner/Preconditioner.hpp"
+
+#include <boost/scoped_ptr.hpp>
+
+
+#include "Covariance.hpp"
 
 namespace SLOM {
+
+#define SLOM_ESTIMATOR_CHANGE(what, name) \
+		void change ## what (boost::scoped_ptr<what> &new ## what) { \
+			name.swap(new ## what); \
+			resetAlgoAndSolver(); \
+		} \
+		void change ## what(what *new ## what) { \
+			boost::scoped_ptr<what> scoped ## what(new ## what); \
+			change ## what (scoped ## what); \
+		} \
+		const what & get ## what() const { \
+			return *name; \
+		}
+
+
 
 class CallBack;
 class scoped_callback;
@@ -59,50 +84,26 @@ class Estimator
 	 */
 	SparseFunction func;
 	
+	typedef SparseFunction::SparseType SparseType;
+	
 public:
-	//! use the following "damping term" @f$ N @f$ in @f$ (J\trans J + N)\delta = J\trans (y - f(\beta)) @f$
-	enum Algorithm{ 
+	/** use the following "damping term" @f$ N @f$ in @f$ (J\trans J + N)\delta = J\trans (y - f(\beta)) @f$
+	 *  @deprecated Algorithms are specified by separate classes now
+	 */
+	enum AlgorithmE { 
 		GaussNewton        //! @f$N=0@f$
 		,Levenberg         //! @f$N= \lambda*I@f$
 		,LevenbergMarquardt //! @f$N= \lambda*diag(J^T J)@f$
 	};
 	
-	/**
-	 * Linear solver
-	 * @deprecated currently only Cholesky is working
-	 */
-	enum Solver{
-		QR, // QR is not supported at the moment (and maybe will never be again)
-		Cholesky
-	};
 private:
-	friend class CallBack;
-	CallBack *callback;
+	CallBack *callback; // TODO make this a scoped_ptr?
+
+	// TODO maybe these can be members of SparseFunction
+	boost::scoped_ptr<Solver> solver;
+	boost::scoped_ptr<Algorithm> algo;
+	boost::scoped_ptr<Preconditioner> precond;
 	
-	
-	enum Algorithm usedAlgorithm;
-	enum Solver usedSolver;
-	
-	css* symbolic; // symbolic decomposition of jacobian or JtJ 
-	csn* numeric;  // numeric decomposition of jacobian or JtJ
-	
-	// the current residuum:
-	Eigen::VectorXd res, newRes;
-	
-	// workspace for solving:
-	Eigen::VectorXd workspace;
-	
-	// current delta vector
-	Eigen::VectorXd delta;
-	
-	
-	// lamda parameter for LMA:
-	double lamda; 
-	
-	
-	/** the last Residual Sum of Squares
-	 */
-	double lastRSS;
 	
 public:
 	
@@ -113,85 +114,80 @@ public:
 	 * 
 	 * @param alg   Choose Algorithm. Currently SLoM supports GaussNewton, Levenberg and LevenbergMarquardt
 	 * @param lamda0 Initial lamda for Levenberg(-Marquardt)
+	 * @deprecated Pass Algorithm as an object pointer instead
 	 */
-	Estimator(Algorithm alg=GaussNewton, double lamda0=1e-3) : 
-		callback(0),
-		usedAlgorithm(alg), usedSolver(Cholesky),
-		symbolic(0), numeric(0), lamda(lamda0)
-	{};
+	MTK_DEPRECATED
+	Estimator(AlgorithmE alg, double lamda0=1e-3, Solver* solver_ = new CholeskySolver<>);
 	
-	/**
-	 * Construct Estimator, also choosing linear solver.
-	 * @deprecated QR Solving is not supported anymore
-	 */
-	Estimator(Solver solver, Algorithm alg=GaussNewton, double lamda0=1e-3) :
+	Estimator(Algorithm* alg = new SLOM::GaussNewtonAlgorithm(), Solver* solver = new CholeskySolver<>()) :
 		callback(0),
-		usedAlgorithm(alg), usedSolver(solver),
-		symbolic(0), numeric(0), lamda(lamda0)
+		solver(solver),
+		algo(alg)
 	{
-		assert(usedSolver != QR && "usage of QR is deprecated now, please use Cholesky instead");
+		func.callback = 0;
+		resetAlgoAndSolver();
 	}
+	
 	/**
 	 * Set the CallBack object, to get status informations
 	 */
 	void setCallBack(CallBack &cb){
-		callback = &cb;
+		//FIXME also set algo and solver callback?
+		func.callback = callback = &cb;
 	}
+	
+	CallBack* getCallback() const {
+		return callback;
+	}
+	
 	//! Destructor (what else to say ...)
-	virtual ~Estimator();
+	~Estimator();
+	
+	
+	/**
+	 * Deletes all temporary data. 
+	 * Measurements, random variables and the algorithms state are kept unmodified,
+	 * i.e. it is possible to continue the algorithm afterwards.
+	 */
+	void cleanWorkspace() {
+		func.cleanWorkspace();
+	}
+	
+	/**
+	 * Call this method if you manually changed data, which is only indirectly used by the measurements.
+	 */
+	void dataChanged() {
+		func.valuesChanged();
+	}
 	
 	/**
 	 * Initialize Jacobian and symbolical decomposition.
 	 * @deprecated You do not need to call this method yourself, because the 
 	 *             algorithm decides itself when initialization is necessary
 	 */
-	void initialize()  __attribute__((deprecated)) {
-		init();
-	}
+	MTK_DEPRECATED
+	void initialize() { }
 	//@}
 private:
 	
-	//! \name internal methods of the algorithm
-	//@{
-	/**
-	 * Evaluate the function, store result to vector starting at result and return the RSS.
-	 */
-	double evaluate(double *result) const;
 	
 	/**
-	 * Internal method for initialization.
+	 * re-init pointers for interaction of algorithm and solver with each other and with function
 	 */
-	void init();
+	void resetAlgoAndSolver() {
+		assert(solver && "Require valid Solver");
+		assert(algo && "Require valid Algorithm");
+		
+		solver->func = algo->func = &func;
+		
+		if(precond)
+			precond->func = &func;
+		
+		algo->solver = func.solver = solver.get();
+		func.precond = precond.get();
+		func.algo = algo.get();
+	}
 	
-	
-	
-	/**
-	 * calculates delta = (J^T*J + N)^-1 * J^T * res, 
-	 * with damping term N depending on current algorithm.
-	 */
-	void calculate_delta();
-	
-	
-	/**
-	 * add scale * delta to variables and evaluate new residuum to workspace
-	 */
-	double apply_delta(double scale = -1);
-	
-	/**
-	 * Stores the modified variables or restores the old ones depending on newRSS
-	 * and algorithm. Returns gain = (oldRSS - newRSS)/(newRSS)
-	 */
-	double store_or_restore(double newRSS, scoped_callback &cb);
-	
-	void freeWorkspace();
-	bool qrSolve(double* delta, const double *res);
-	bool choleskySolve(double* delta, const double *res);
-	
-	/**
-	 * Update the sparse Matrix depending on the current algorithm
-	 */
-	void updateSparse();
-	//@}
 	
 public:
 	//! \name Optimization functions
@@ -205,14 +201,37 @@ public:
 	
 	/**
 	 * Function to change from between GaussNewton, Levenberg and LevenbergMarquardt
-	 * @note The algorithm will be out-factored in a future versions
+	 * @deprecated The algorithm is out-factored into the Algorithm classes
 	 */
-	void changeAlgorithm(Algorithm algo, double lamdaNew=-1){
-		usedAlgorithm = algo;
-		if(lamdaNew > 0) lamda = lamdaNew;
-		freeWorkspace();
-		init();
+	MTK_DEPRECATED
+	void changeAlgorithm(AlgorithmE algo, double lamdaNew=-1){
+		switch(algo){
+		case LevenbergMarquardt:
+			std::cerr << "Warning only Levenberg is supported\n";
+			// no break
+		case Levenberg:
+			if(lamdaNew < 0) {
+				std::cerr << "Warning, you need to set lambda when using deprecated changeAlgorithm, setting lambda=1.0";
+				lamdaNew = 1.0;
+			}
+			changeAlgorithm(new SLOM::LevenbergMarquardt(lamdaNew));
+			break;
+		case GaussNewton:
+			changeAlgorithm(new SLOM::GaussNewtonAlgorithm());
+			break;
+		}
+		resetAlgoAndSolver();
 	}
+	
+	SLOM_ESTIMATOR_CHANGE(Algorithm, algo)
+	
+	/**
+	 * Change the Solver, by swapping scoped pointers. The old Solver can by analyzed afterwards.
+	 * @param newSolver
+	 */
+	SLOM_ESTIMATOR_CHANGE(Solver, solver)
+
+	SLOM_ESTIMATOR_CHANGE(Preconditioner, precond)
 	//@}
 	
 	//! \name Inspection functions of the optimization state
@@ -221,8 +240,10 @@ public:
 	 * returns the last residual sum of squares.
 	 * @deprecated Usage is discouraged, use getRSS() instead
 	 */
+	MTK_DEPRECATED
 	double getLastRSS() const {
-		return lastRSS;
+		assert(false && "called deprecated function");
+		return 0;
 	}
 	/**
 	 * Gets the current residual sum of squares.
@@ -230,11 +251,23 @@ public:
 	 */
 	double getRSS()
 	{
-		init();
-		if(lastRSS < 0){
-			lastRSS = evaluate(res.data());
-		}
-		return lastRSS;
+		return func.getRSS();
+	}
+	
+	double getRMS() {
+		return std::sqrt(getRSS()/getM());
+	}
+	
+	/**
+	 * Gets the squared norm of the gradient
+	 * @return
+	 */
+	double getSquaredNormOfGradient() {
+		return func.getSquaredNormOfGradient();
+	}
+	
+	const Eigen::VectorXd& getGradient() {
+		return func.getGradient();
 	}
 	
 	/**
@@ -243,8 +276,7 @@ public:
 	 * change while the algorithm is running.
 	 */
 	const Eigen::VectorXd& getRes(){
-		getRSS();
-		return res;
+		return func.getResiduum();
 	}
 	
 	/**
@@ -259,8 +291,10 @@ public:
 	/**
 	 * Current lamda of Levenberg(-Marquardt) algorithm.
 	 */
+	MTK_DEPRECATED
 	double getLamda () const {
-		return lamda;
+		assert(false && "You have to obtain lambda from your algorithm directly now");
+		return 0.0/0.0;
 	}
 	
 	/**
@@ -268,12 +302,20 @@ public:
 	 */
 	std::ostream& dumpJacobian(std::ostream& out);
 	
+	const SparseType& get_JtJ() {
+		return func.get_JtJ();
+	}
+
+	const SparseType& getJ() {
+		return func.getJ();
+	}
+	
 	/**
 	 * prints the current Jacobian
 	 * @deprecated Use dumpJacobian(std::ostream&) instead
 	 */
-	void printJacobian(bool brief=false) const __attribute__((deprecated)) {
-		cs_print(func.jacobian, brief);
+	void printJacobian(bool /*brief*/=false) const __attribute__((deprecated)) {
+		//cs_print(func.jacobian, brief);
 	}
 
 	//@}
@@ -297,10 +339,11 @@ public:
 
 	/**
 	 * Reinitialize value of RV with given id.
+	 * Manifold2 must be the same as or convertible to Manifold
 	 */
-	template<class Manifold>
-	VarID<Manifold> reinitRV(VarID<Manifold> id, const Manifold& m) {
-		return func.reinitRV(id, m);
+	template<class Manifold, class Manifold2>
+	VarID<Manifold> reinitRV(VarID<Manifold> id, const Manifold2& m) {
+		return func.reinitRV(id, Manifold(m));
 	}
 	
 	/**
@@ -328,14 +371,22 @@ public:
 			std::cerr << "Tried to remove a variable still in use!" << std::endl;
 		return success;
 	}
-
+	
 	/**
 	 * Inserts a new measurement. 
 	 * The Measurement itself registers the variables it depends on. 
 	 */
 	template<class Measurement>
 	MeasID<Measurement> insertMeasurement(const Measurement &m) {
-		return func.insertMeasurement(m);
+		return func.insertMeasurement(m, internal::InvDeviation<void>());
+	}
+	
+	/**
+	 * Inserts a new measurement with additional covariance information. 
+	 */
+	template<class Measurement, class DevType>
+	MeasID<Measurement> insertMeasurement(const Measurement &m, const internal::InvDeviation<DevType>& cov) {
+		return func.insertMeasurement(m, cov);
 	}
 	
 	/**
@@ -381,13 +432,30 @@ public:
 	int getRSS(double &rss) const {
 		return func.get_RSS<Measurement>(rss);
 	}
+	template<class Measurement>
+	MTK::vectview<const double, Measurement::DIM>
+	getRes(const SLOM::MeasID<Measurement>& id) {
+		return func.getRes(id);
+	}
+	template<class Measurement>
+	double
+	getRSS(const SLOM::MeasID<Measurement>& id) {
+		return func.getRes(id).squaredNorm();
+	}
 	/**
 	 * get the RSS of all measurements depending on Variable id
 	 */
 	template<class Manifold>
-	static int getRSS(double &rss, const VarID<Manifold> &id) {
-		return SparseFunction::get_RSS(rss, id);
+	int getRSS(double &rss, const VarID<Manifold> &id) const {
+		return func.get_RSS(rss, id);
 	}
+	
+	/// call Functor on every measurement depending on id
+	template<class Functor, class Manifold>
+	void traverse_measurements(const SLOM::VarID<Manifold>& id, Functor f) const {
+		return SparseFunction::traverse_measurements(id, f);
+	}
+
 	//@}
 };
 

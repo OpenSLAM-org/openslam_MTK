@@ -59,8 +59,8 @@ struct indexed_list_hook : public boost::intrusive::list_base_hook<> {
  * indexed_list is an intrusive double link list, which also provides an index, 
  * and takes care of deallocation.
  */
-template<class type>
-struct indexed_list : boost::intrusive::list<type, boost::intrusive::constant_time_size<false> > {
+template<class type, template<class> class holder = type::template holder>
+class indexed_list : public boost::intrusive::list<type, boost::intrusive::constant_time_size<false> > {
 	
 	typedef boost::intrusive::list<type, boost::intrusive::constant_time_size<false> > Container;
 	
@@ -70,7 +70,7 @@ struct indexed_list : boost::intrusive::list<type, boost::intrusive::constant_ti
 	//Container list; // TODO inheritance or aggregation?
 	int last_index;
 	
-	
+public:
 	indexed_list() : last_index(0) {}
 	
 	~indexed_list() {
@@ -82,19 +82,27 @@ struct indexed_list : boost::intrusive::list<type, boost::intrusive::constant_ti
 	template<class X>
 	struct id {
 		friend class indexed_list;
-		typedef typename type::template holder<X>* ptr_type;
+		typedef holder<X>* ptr_type;
 		id(ptr_type ptr) : ptr(ptr) {}
 		id() : ptr(0) {}
+		
+		int index() const {return ptr->idx;}
+		
+		template<class Y>
+		bool operator<(const id<Y>& y) const {
+			return index() < y.index();
+		}
+		
 	protected:
 		ptr_type ptr;
 	};
 	
 	template<class X>
-	id<X> insert(typename type::template holder<X> *x){
+	id<X> insert(holder<X> *x){
 		Container::push_back(*x);
 		assert(x->idx == -1);
 		x->idx = last_index;
-		last_index += x->DIM;
+		last_index += x->getDim();
 		return id<X>(x);
 	}
 	
